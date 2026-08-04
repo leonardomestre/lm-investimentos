@@ -1,5 +1,6 @@
 package com.investimento.app;
 
+import com.investimento.app.data.Database;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -32,6 +33,10 @@ public class App extends Application {
 
     @Override
     public void start(Stage stage) {
+        // Abre/cria o banco SQLite local e garante o schema (ATV-02) -
+        // precisa acontecer cedo, antes de qualquer tela real existir.
+        Database.getConnection();
+
         loadFonts();
 
         Label label = new Label("SELIC");
@@ -68,6 +73,11 @@ public class App extends Application {
                 System.err.println("Falha ao carregar fonte " + path + ": " + e.getMessage());
             }
         }
+    }
+
+    @Override
+    public void stop() {
+        Database.close();
     }
 
     public static void main(String[] args) {
