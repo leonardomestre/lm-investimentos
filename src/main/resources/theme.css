@@ -1,0 +1,399 @@
+/*
+ * Tema JavaFX extraído de documentação/templates/Telas.dc.html
+ * (projeto Claude Design "Template dashboard financeiro").
+ *
+ * Ver .claude/skills/design-system/references/paleta.md e componentes.md
+ * para a origem e o raciocínio de cada token — não editar hex direto aqui
+ * sem atualizar aquela documentação também.
+ *
+ * Uso: scene.getStylesheets().add(getClass().getResource("/theme.css").toExternalForm());
+ */
+
+/* ---------- Fontes ---------- */
+/* NAO use @font-face aqui — testado em JavaFX 21: o parser de @font-face do
+   JavaFX falha silenciosamente para varios destes .ttf (loga "Could not load
+   @font-face font" no console, mesmo com o arquivo intacto) mesmo quando o
+   arquivo abre normalmente. A forma confiavel e carregar via
+   Font.loadFont(InputStream, 0) em codigo Java ANTES de aplicar este
+   stylesheet — ver App.java do projeto (metodo loadFonts()). Este CSS so
+   referencia -fx-font-family pelo nome que Font.loadFont() de fato registra.
+
+   Nomes de familia REAIS confirmados (Font.loadFont(...).getFamily()) — os
+   .ttf do Google Fonts nao usam um nome de familia unico por peso: Regular e
+   Bold compartilham a familia base (modelo legado de 4 estilos por familia:
+   Regular/Bold/Italic/BoldItalic), os demais pesos viram familias distintas:
+
+     Manrope-Regular.ttf    -> familia "Manrope" (estilo Regular)
+     Manrope-Bold.ttf       -> familia "Manrope" (estilo Bold) — NAO "Manrope Bold"
+     Manrope-Medium.ttf     -> familia "Manrope Medium"
+     Manrope-SemiBold.ttf   -> familia "Manrope SemiBold"
+     Manrope-ExtraBold.ttf  -> familia "Manrope ExtraBold"
+     IBMPlexMono-Regular.ttf   -> familia "IBM Plex Mono"
+     IBMPlexMono-Medium.ttf    -> familia "IBM Plex Mono Medium"
+     IBMPlexMono-SemiBold.ttf  -> familia "IBM Plex Mono SemiBold"
+
+   Ou seja: para o peso Bold, use -fx-font-family:"Manrope" combinado com
+   -fx-font-weight:bold — nunca "Manrope Bold" como nome de familia, essa
+   familia nao existe e o texto cairia silenciosamente numa fonte padrao do
+   sistema. */
+
+.root {
+    /* ---------- Superfícies (tema claro) ---------- */
+    -fx-color-bg-page:        #e9e7e2;
+    -fx-color-bg-shell:       #faf9f7;
+    -fx-color-bg-surface:     #ffffff;
+    -fx-color-bg-surface-tint:#f7f9f8;
+    -fx-color-bg-muted:       #eeebe5;
+    -fx-color-border-card:    #e6e3dd;
+    -fx-color-border-row:     #f4f2ed;
+    -fx-color-border-pill:    #dcd8d1;
+    -fx-color-border-dashed:  #d8d4cc;
+    -fx-color-bg-empty:       #f7f6f3;
+
+    /* ---------- Texto sobre superfície clara ---------- */
+    -fx-color-text-primary:   #14181a;
+    -fx-color-text-secondary: #43494c;
+    -fx-color-text-muted:     #7c8388;
+    -fx-color-text-faint:     #8a9196;
+    -fx-color-text-eyebrow:   #5c666b;
+    -fx-color-text-disabled:  #a9aeb1;
+
+    /* ---------- Sidebar (tema escuro fixo) ---------- */
+    -fx-color-sidebar-bg:              #14181a;
+    -fx-color-sidebar-text:            #9aa2a7;
+    -fx-color-sidebar-text-active:     #ffffff;
+    -fx-color-sidebar-item-active-bg:  #22282b;
+    -fx-color-sidebar-dot-inactive:    #3a4247;
+    -fx-color-sidebar-card-bg:         #1c2225;
+    -fx-color-sidebar-divider:         #2a3134;
+    -fx-color-sidebar-label-muted:     #7d868b;
+
+    /* ---------- Marca ---------- */
+    -fx-color-accent:            #3d9c78;
+    -fx-color-accent-strong:     #2f6f5e;
+    -fx-color-accent-hover:      #1f5346;
+    -fx-color-on-accent:         #0c1512;
+
+    /* ---------- Status ---------- */
+    -fx-color-gain:              #2e7d4f;
+    -fx-color-gain-bg:           #f2f8f4;
+    -fx-color-gain-on-dark:      #5cc79b;
+    -fx-color-loss:              #b3402f;
+    -fx-color-loss-bg:           #fbf3f1;
+    -fx-color-neutral-warn:      #c9a227;
+    -fx-color-neutral-warn-dark: #a08316;
+    -fx-color-neutral-warn-bg:   #fbf6e8;
+
+    /* ---------- Zona de perigo ---------- */
+    -fx-color-danger-dark-bg:     #241a18;
+    -fx-color-danger-dark-border: #6b3a31;
+    -fx-color-danger-dark-text:   #e08a76;
+
+    /* ---------- Categorias de ativo (fixas — não trocar por tela) ---------- */
+    -fx-color-category-acoes:       #2f6f5e;
+    -fx-color-category-fiis:        #5cae92;
+    -fx-color-category-renda-fixa:  #14181a;
+    -fx-color-category-cripto:      #c9a227;
+    -fx-color-category-cambio:      #b3402f;
+
+    /* ---------- Gráficos ---------- */
+    -fx-color-chart-grid:            #eeebe5;
+    -fx-color-chart-axis-text:       #a2a8ab;
+    -fx-color-chart-line-primary:    #2f6f5e;
+    -fx-color-chart-line-secondary:  #c3bfb6;
+
+    -fx-font-family: "Manrope";
+    -fx-background-color: -fx-color-bg-page;
+}
+
+/* =========================================================
+   Sidebar
+   ========================================================= */
+
+.sidebar {
+    -fx-background-color: -fx-color-sidebar-bg;
+    -fx-padding: 24 16;
+    -fx-spacing: 28;
+    -fx-min-width: 244;
+    -fx-pref-width: 244;
+}
+
+.sidebar-eyebrow {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 10px;
+    -fx-text-fill: -fx-color-text-eyebrow;
+}
+
+.sidebar-nav-item {
+    -fx-padding: 9 10;
+    -fx-background-radius: 9;
+    -fx-spacing: 10;
+    -fx-cursor: hand;
+}
+.sidebar-nav-item .label { -fx-font-family: "Manrope Medium"; -fx-font-size: 14px; -fx-text-fill: -fx-color-sidebar-text; }
+/* JavaFX -fx-background-radius nao aceita "%": um raio maior que metade do
+   lado do elemento sempre produz um circulo perfeito, por isso 10 aqui
+   (dot real e 6x6) funciona igual a "50%" no CSS web. */
+.sidebar-nav-item .dot   { -fx-background-color: -fx-color-sidebar-dot-inactive; -fx-background-radius: 10; -fx-min-width: 6; -fx-min-height: 6; -fx-max-width: 6; -fx-max-height: 6; }
+
+.sidebar-nav-item-active {
+    -fx-padding: 9 10;
+    -fx-background-radius: 9;
+    -fx-background-color: -fx-color-sidebar-item-active-bg;
+    -fx-spacing: 10;
+    -fx-cursor: hand;
+}
+.sidebar-nav-item-active .label { -fx-font-family: "Manrope SemiBold"; -fx-font-size: 14px; -fx-text-fill: -fx-color-sidebar-text-active; }
+.sidebar-nav-item-active .dot   { -fx-background-color: -fx-color-accent; -fx-background-radius: 10; -fx-min-width: 6; -fx-min-height: 6; -fx-max-width: 6; -fx-max-height: 6; }
+
+.sidebar-card {
+    -fx-background-color: -fx-color-sidebar-card-bg;
+    -fx-background-radius: 11;
+    -fx-padding: 13 14;
+    -fx-spacing: 7;
+}
+
+.sidebar-card-divider {
+    -fx-background-color: -fx-color-sidebar-divider;
+    -fx-pref-height: 1;
+}
+
+/* =========================================================
+   Header / barra de ação
+   ========================================================= */
+
+.header-bar {
+    -fx-background-color: -fx-color-bg-surface;
+    -fx-border-color: transparent transparent -fx-color-border-card transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 22 28;
+    -fx-spacing: 20;
+}
+
+.header-title    { -fx-font-family: "Manrope ExtraBold"; -fx-font-size: 24px; -fx-text-fill: -fx-color-text-primary; }
+.header-subtitle { -fx-font-family: "Manrope Medium";    -fx-font-size: 13px; -fx-text-fill: -fx-color-text-muted; }
+
+.pill-secondary {
+    -fx-border-color: -fx-color-border-pill;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 9 14;
+    -fx-font-family: "Manrope SemiBold";
+    -fx-font-size: 13px;
+    -fx-text-fill: -fx-color-text-secondary;
+    -fx-cursor: hand;
+}
+
+.button-primary {
+    -fx-background-color: -fx-color-text-primary;
+    -fx-background-radius: 10;
+    -fx-padding: 10 16;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: white;
+    -fx-cursor: hand;
+}
+
+/* =========================================================
+   KPI card
+   ========================================================= */
+
+.kpi-card {
+    -fx-background-color: -fx-color-bg-surface;
+    -fx-border-color: -fx-color-border-card;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 14 15;
+    -fx-spacing: 9;
+}
+.kpi-label  { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 10px; -fx-text-fill: -fx-color-text-faint; }
+.kpi-value  { -fx-font-family: "Manrope"; -fx-font-weight: bold; -fx-font-size: 21px; -fx-text-fill: -fx-color-text-primary; }
+.kpi-footer-neutral { -fx-font-family: "Manrope SemiBold"; -fx-font-size: 11px; -fx-text-fill: -fx-color-text-muted; }
+.kpi-footer-gain    { -fx-font-family: "Manrope"; -fx-font-weight: bold;     -fx-font-size: 11px; -fx-text-fill: -fx-color-gain; }
+.kpi-footer-loss    { -fx-font-family: "Manrope"; -fx-font-weight: bold;     -fx-font-size: 11px; -fx-text-fill: -fx-color-loss; }
+
+/* =========================================================
+   Card escuro de resumo (ex.: Resumo geral do dashboard)
+   ========================================================= */
+
+.card-dark {
+    -fx-background-color: -fx-color-sidebar-bg;
+    -fx-background-radius: 14;
+    -fx-padding: 20 22;
+    -fx-spacing: 18;
+}
+.card-dark-eyebrow { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 10px; -fx-text-fill: -fx-color-sidebar-label-muted; }
+.card-dark-hero     { -fx-font-family: "Manrope ExtraBold"; -fx-font-size: 34px; -fx-text-fill: white; }
+.card-dark-label    { -fx-font-family: "Manrope Medium"; -fx-font-size: 12px; -fx-text-fill: -fx-color-sidebar-text; }
+.card-dark-value    { -fx-font-family: "Manrope"; -fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: white; }
+.card-dark-value-gain { -fx-font-family: "Manrope"; -fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: -fx-color-gain-on-dark; }
+.card-dark-divider  { -fx-background-color: -fx-color-sidebar-divider; -fx-pref-height: 1; }
+.card-dark-progress-track { -fx-background-color: -fx-color-sidebar-divider; -fx-background-radius: 5; -fx-pref-height: 8; }
+.card-dark-progress-fill  { -fx-background-color: -fx-color-accent; -fx-background-radius: 5; }
+
+/* =========================================================
+   Card de conteúdo padrão
+   ========================================================= */
+
+.content-card {
+    -fx-background-color: -fx-color-bg-surface;
+    -fx-border-color: -fx-color-border-card;
+    -fx-border-radius: 14;
+    -fx-background-radius: 14;
+    -fx-padding: 18 20;
+    -fx-spacing: 14;
+}
+.content-card-title    { -fx-font-family: "Manrope"; -fx-font-weight: bold; -fx-font-size: 15px; -fx-text-fill: -fx-color-text-primary; }
+.content-card-subtitle { -fx-font-family: "Manrope Medium"; -fx-font-size: 12px; -fx-text-fill: -fx-color-text-muted; }
+
+.tab-pill {
+    -fx-border-color: -fx-color-border-card;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 6 11;
+    -fx-font-family: "Manrope SemiBold";
+    -fx-font-size: 12px;
+    -fx-text-fill: -fx-color-text-muted;
+    -fx-cursor: hand;
+}
+.tab-pill-active {
+    -fx-background-color: -fx-color-text-primary;
+    -fx-background-radius: 8;
+    -fx-padding: 6 11;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 12px;
+    -fx-text-fill: white;
+}
+
+/* =========================================================
+   Barra de ganho/perda por categoria
+   ========================================================= */
+
+.gainloss-bar-track      { -fx-background-color: transparent; -fx-pref-height: 20; }
+.gainloss-bar-fill-gain  { -fx-background-color: -fx-color-gain; -fx-background-radius: 4; }
+.gainloss-bar-fill-loss  { -fx-background-color: -fx-color-loss; -fx-background-radius: 4; }
+.gainloss-value-gain     { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 13px; -fx-text-fill: -fx-color-gain; }
+.gainloss-value-loss     { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 13px; -fx-text-fill: -fx-color-loss; }
+
+/* =========================================================
+   Tabela
+   ========================================================= */
+
+.table-header-cell {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 10px;
+    -fx-text-fill: -fx-color-text-faint;
+    -fx-border-color: transparent transparent -fx-color-border-card transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 0 0 10 0;
+}
+.table-row-primary   { -fx-font-family: "Manrope"; -fx-font-weight: bold;   -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary; }
+.table-row-secondary { -fx-font-family: "Manrope Medium"; -fx-font-size: 12px; -fx-text-fill: -fx-color-text-muted; }
+.table-cell-numeric  { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary; }
+.table-cell-gain     { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 13px; -fx-text-fill: -fx-color-gain; }
+.table-cell-loss     { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 13px; -fx-text-fill: -fx-color-loss; }
+.table-row-divider   { -fx-border-color: transparent transparent -fx-color-border-row transparent; -fx-border-width: 0 0 1 0; }
+
+/* =========================================================
+   Linha de destaque (maiores variações do dia)
+   ========================================================= */
+
+.highlight-row-gain {
+    -fx-background-color: -fx-color-gain-bg;
+    -fx-background-radius: 10;
+    -fx-padding: 11 13;
+    -fx-spacing: 12;
+}
+.highlight-row-loss {
+    -fx-background-color: -fx-color-loss-bg;
+    -fx-background-radius: 10;
+    -fx-padding: 11 13;
+    -fx-spacing: 12;
+}
+.highlight-badge-gain {
+    -fx-background-color: -fx-color-gain;
+    -fx-background-radius: 8;
+    -fx-min-width: 26; -fx-min-height: 26;
+    -fx-max-width: 26; -fx-max-height: 26;
+    -fx-alignment: center;
+}
+.highlight-badge-loss {
+    -fx-background-color: -fx-color-loss;
+    -fx-background-radius: 8;
+    -fx-min-width: 26; -fx-min-height: 26;
+    -fx-max-width: 26; -fx-max-height: 26;
+    -fx-alignment: center;
+}
+
+/* =========================================================
+   Campo de formulário
+   ========================================================= */
+
+.text-field {
+    -fx-background-color: -fx-color-bg-surface;
+    -fx-border-color: -fx-color-border-pill;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 0 13;
+    -fx-pref-height: 42;
+    -fx-font-family: "Manrope Medium";
+    -fx-font-size: 14px;
+    -fx-text-fill: -fx-color-text-disabled;
+    /* Foco: prefira o mecanismo nativo do JavaFX, nao tente imitar
+       box-shadow com Effect — TextField ja suporta isto: */
+    -fx-focus-color: -fx-color-accent;
+    -fx-faint-focus-color: rgba(61,156,120,0.14);
+}
+
+.text-field-selected {
+    -fx-border-color: -fx-color-text-primary;
+    -fx-border-width: 1.5;
+    -fx-text-fill: -fx-color-text-primary;
+    -fx-font-family: "Manrope SemiBold";
+}
+
+.field-group-disabled {
+    -fx-opacity: 0.45;
+}
+.field-group-disabled .text-field {
+    -fx-border-color: -fx-color-border-dashed;
+}
+
+/* =========================================================
+   Zona de perigo
+   ========================================================= */
+
+.danger-zone {
+    -fx-background-color: -fx-color-danger-dark-bg;
+    -fx-background-radius: 12;
+    -fx-padding: 16 18;
+    -fx-spacing: 12;
+}
+.danger-zone-title { -fx-font-family: "Manrope"; -fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: -fx-color-danger-dark-text; }
+.danger-zone-desc  { -fx-font-family: "Manrope Medium"; -fx-font-size: 11px; -fx-text-fill: -fx-color-sidebar-text; }
+.danger-zone-button {
+    -fx-border-color: -fx-color-danger-dark-border;
+    -fx-border-radius: 9;
+    -fx-background-radius: 9;
+    -fx-padding: 9 14;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 12px;
+    -fx-text-fill: -fx-color-danger-dark-text;
+    -fx-cursor: hand;
+}
+
+/* =========================================================
+   Sombras (efeitos aproximados — ver paleta.md "Sombras" para
+   os valores CSS originais; DropShadow do JavaFX nao e uma
+   conversao matematica exata de box-shadow, os parametros
+   abaixo foram ajustados visualmente)
+   ========================================================= */
+
+.shell-shadow {
+    -fx-effect: dropshadow(gaussian, rgba(20,24,26,0.4), 32, 0, 0, 14);
+    -fx-border-color: rgba(20,24,26,0.09);
+    -fx-border-width: 1;
+}
+.dropdown-shadow {
+    -fx-effect: dropshadow(gaussian, rgba(20,24,26,0.28), 16, 0, 0, 8);
+}
