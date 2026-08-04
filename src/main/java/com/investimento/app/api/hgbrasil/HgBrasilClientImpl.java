@@ -36,6 +36,9 @@ public class HgBrasilClientImpl implements HgBrasilClient {
     private final String apiKey;
     private final HttpClient httpClient;
 
+    /** Contador simples de requisicoes HTTP feitas — mesmo padrao da ATV-04/05, usado pelos testes da ATV-06 (cache). */
+    private int requestCount = 0;
+
     public HgBrasilClientImpl(String apiKey) {
         this.apiKey = apiKey;
         this.httpClient = HttpClient.newHttpClient();
@@ -43,6 +46,10 @@ public class HgBrasilClientImpl implements HgBrasilClient {
 
     public HgBrasilClientImpl() {
         this(System.getenv("HG_BRASIL_KEY") != null ? System.getenv("HG_BRASIL_KEY") : "ee3b78db");
+    }
+
+    public int getRequestCount() {
+        return requestCount;
     }
 
     @Override
@@ -213,6 +220,7 @@ public class HgBrasilClientImpl implements HgBrasilClient {
                 .GET()
                 .build();
         try {
+            requestCount++;
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             // A API responde HTTP 200 mesmo em erro — nunca confie só no status.
             return new JSONObject(response.body());
