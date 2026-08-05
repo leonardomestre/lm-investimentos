@@ -1,22 +1,17 @@
 package com.investimento.app;
 
 import com.investimento.app.data.Database;
+import com.investimento.app.ui.Shell;
 import javafx.application.Application;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 import java.io.InputStream;
 
 /**
- * Smoke test do esqueleto do projeto: confirma que o JavaFX inicia, que as
- * fontes (Manrope/IBM Plex Mono) carregam e que o theme.css (paleta da skill
- * design-system) se aplica corretamente. Nao e uma tela real do app.
+ * Ponto de entrada do app: carrega fontes, monta o {@link Shell} (sidebar +
+ * area de conteudo navegavel - ATV-07) e aplica o theme.css.
  */
 public class App extends Application {
 
@@ -39,24 +34,10 @@ public class App extends Application {
 
         loadFonts();
 
-        Label label = new Label("SELIC");
-        label.getStyleClass().add("kpi-label");
-
-        Label value = new Label("15,00% a.a.");
-        value.getStyleClass().add("kpi-value");
-
-        VBox kpiCard = new VBox(9, label, value);
-        kpiCard.getStyleClass().add("kpi-card");
-
-        StackPane root = new StackPane(kpiCard);
-        root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(40));
-        root.setStyle("-fx-background-color: -fx-color-bg-page;");
-
-        Scene scene = new Scene(root, 480, 320);
+        Scene scene = new Scene(new Shell(), 1440, 900);
         scene.getStylesheets().add(getClass().getResource("/theme.css").toExternalForm());
 
-        stage.setTitle("Investimento — smoke test do design system");
+        stage.setTitle("Carteira — LM Investimentos");
         stage.setScene(scene);
         stage.show();
     }
