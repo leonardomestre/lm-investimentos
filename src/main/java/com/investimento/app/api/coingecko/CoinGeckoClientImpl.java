@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Implementação HTTP (síncrona, stateless) de {@link CoinGeckoClient}. API
@@ -62,6 +63,11 @@ public class CoinGeckoClientImpl implements CoinGeckoClient {
 
     public int getRequestCount() {
         return requestCount;
+    }
+
+    @Override
+    public Set<String> supportedSymbols() {
+        return ID_MAP.keySet();
     }
 
     @Override
