@@ -1,5 +1,10 @@
 package com.investimento.app.ui;
 
+import com.investimento.app.repository.AssetRepository;
+import com.investimento.app.repository.PortfolioSnapshotRepository;
+import com.investimento.app.repository.RateHistoryRepository;
+import com.investimento.app.service.MarketService;
+import com.investimento.app.service.PositionService;
 import com.investimento.app.ui.screens.DashboardView;
 import com.investimento.app.ui.screens.FixedIncomeView;
 import com.investimento.app.ui.screens.ForexCryptoView;
@@ -21,14 +26,24 @@ import java.util.Map;
  * trocas de tela ({@link #select(Screen)} so troca qual {@code Node} fica
  * visivel) - preserva estado de formulario/scroll quando as telas reais
  * forem implementadas nas proximas atividades.</p>
+ *
+ * <p>Recebe do {@code App} (composition root, ATV-12) as dependencias que as
+ * telas reais precisam - por enquanto so o {@code DashboardView} usa; as
+ * demais 6 telas continuam stubs sem dependencia (ATV-13 em diante passam a
+ * receber o que precisarem, do mesmo jeito).</p>
  */
 public class Shell extends BorderPane {
 
     private final Map<Screen, ScreenView> views = new EnumMap<>(Screen.class);
     private final Sidebar sidebar;
 
-    public Shell() {
-        views.put(Screen.DASHBOARD, new DashboardView());
+    public Shell(MarketService marketService,
+                 PositionService positionService,
+                 AssetRepository assetRepository,
+                 PortfolioSnapshotRepository portfolioSnapshotRepository,
+                 RateHistoryRepository rateHistoryRepository) {
+        views.put(Screen.DASHBOARD, new DashboardView(marketService, positionService, assetRepository,
+                portfolioSnapshotRepository, rateHistoryRepository, this::select));
         views.put(Screen.STOCKS_FIIS, new StocksFiisView());
         views.put(Screen.FIXED_INCOME, new FixedIncomeView());
         views.put(Screen.FOREX_CRYPTO, new ForexCryptoView());
