@@ -89,6 +89,9 @@
     -fx-color-danger-dark-border: #6b3a31;
     -fx-color-danger-dark-text:   #e08a76;
 
+    /* ---------- Campo dentro de card escuro (ATV-13, formulario de transacao) ---------- */
+    -fx-color-field-dark-border:  #333b3f;
+
     /* ---------- Categorias de ativo (fixas — não trocar por tela) ---------- */
     -fx-color-category-acoes:       #2f6f5e;
     -fx-color-category-fiis:        #5cae92;
@@ -357,6 +360,179 @@
 }
 .field-group-disabled .text-field {
     -fx-border-color: -fx-color-border-dashed;
+}
+
+.field-label {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 10px;
+    -fx-text-fill: -fx-color-text-faint;
+}
+.field-label-dark {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 10px;
+    -fx-text-fill: -fx-color-sidebar-label-muted;
+}
+
+/* Campo de texto dentro de card escuro (ex.: formulario de transacao, ATV-13) */
+.text-field-dark {
+    -fx-background-color: -fx-color-sidebar-card-bg;
+    -fx-border-color: -fx-color-field-dark-border;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 0 13;
+    -fx-pref-height: 42;
+    -fx-font-family: "Manrope Medium";
+    -fx-font-size: 14px;
+    -fx-text-fill: white;
+    -fx-focus-color: -fx-color-accent;
+    -fx-faint-focus-color: rgba(61,156,120,0.14);
+}
+
+/* =========================================================
+   Segmented control (ex.: moeda BRL/USD/EUR, Compra/Venda — ATV-13)
+   ========================================================= */
+
+.segmented-option {
+    -fx-border-color: -fx-color-border-pill;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-background-color: transparent;
+    -fx-text-fill: -fx-color-text-muted;
+    -fx-font-family: "Manrope SemiBold";
+    -fx-font-size: 13px;
+    -fx-pref-height: 42;
+    -fx-cursor: hand;
+}
+.segmented-option-selected {
+    -fx-background-color: -fx-color-text-primary;
+    -fx-border-color: transparent;
+    -fx-text-fill: white;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-pref-height: 42;
+    -fx-cursor: hand;
+}
+.segmented-option-dark {
+    -fx-border-color: -fx-color-field-dark-border;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-background-color: transparent;
+    -fx-text-fill: -fx-color-sidebar-text;
+    -fx-font-family: "Manrope SemiBold";
+    -fx-font-size: 13px;
+    -fx-pref-height: 42;
+    -fx-cursor: hand;
+}
+.segmented-option-selected-buy {
+    -fx-background-color: -fx-color-accent-strong;
+    -fx-border-color: transparent;
+    -fx-text-fill: white;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-pref-height: 42;
+    -fx-cursor: hand;
+}
+.segmented-option-selected-sell {
+    -fx-background-color: -fx-color-loss;
+    -fx-border-color: transparent;
+    -fx-text-fill: white;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-pref-height: 42;
+    -fx-cursor: hand;
+}
+
+/* =========================================================
+   Painel de autocomplete (dropdown flutuante — ATV-13)
+   ========================================================= */
+
+.autocomplete-panel {
+    -fx-background-color: -fx-color-bg-surface;
+    -fx-border-color: -fx-color-border-card;
+    -fx-border-radius: 11;
+    -fx-background-radius: 11;
+    -fx-effect: dropshadow(gaussian, rgba(20,24,26,0.28), 16, 0, 0, 8);
+}
+.autocomplete-item {
+    -fx-padding: 11 13;
+    -fx-cursor: hand;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent -fx-color-border-row transparent;
+    -fx-border-width: 0 0 1 0;
+}
+.autocomplete-item-highlight {
+    -fx-background-color: -fx-color-bg-surface-tint;
+}
+.autocomplete-item-primary   { -fx-font-family: "Manrope"; -fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary; }
+.autocomplete-item-secondary { -fx-font-family: "Manrope Medium"; -fx-font-size: 11px; -fx-text-fill: -fx-color-text-muted; }
+.autocomplete-item-price     { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 12px; -fx-text-fill: -fx-color-text-secondary; }
+.autocomplete-footer         { -fx-background-color: -fx-color-bg-shell; -fx-padding: 9 13; -fx-font-family: "Manrope Medium"; -fx-font-size: 11px; -fx-text-fill: -fx-color-text-faint; }
+
+/* =========================================================
+   Mensagens de formulario (erro de validacao / aviso informativo)
+   ========================================================= */
+
+.form-error-label {
+    -fx-font-family: "Manrope SemiBold";
+    -fx-font-size: 12px;
+    -fx-text-fill: -fx-color-loss;
+    -fx-wrap-text: true;
+}
+.form-info-label {
+    -fx-font-family: "Manrope SemiBold";
+    -fx-font-size: 12px;
+    -fx-text-fill: -fx-color-accent-strong;
+    -fx-wrap-text: true;
+}
+
+/* =========================================================
+   Badge de operacao (Compra/Venda — tabela de transacoes, ATV-13)
+   ========================================================= */
+
+.badge-buy {
+    -fx-background-color: -fx-color-gain-bg;
+    -fx-background-radius: 6;
+    -fx-padding: 4 9;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 11px;
+    -fx-text-fill: -fx-color-accent-strong;
+}
+.badge-sell {
+    -fx-background-color: -fx-color-loss-bg;
+    -fx-background-radius: 6;
+    -fx-padding: 4 9;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 11px;
+    -fx-text-fill: -fx-color-loss;
+}
+
+/* =========================================================
+   Linha de lista de ativo (ATV-13 — "Ativos cadastrados")
+   ========================================================= */
+
+.asset-row {
+    -fx-background-color: -fx-color-bg-empty;
+    -fx-background-radius: 10;
+    -fx-padding: 10 12;
+    -fx-spacing: 12;
+    -fx-cursor: hand;
+}
+.asset-row-selected {
+    -fx-background-color: -fx-color-bg-empty;
+    -fx-background-radius: 10;
+    -fx-padding: 10 12;
+    -fx-spacing: 12;
+    -fx-cursor: hand;
+    -fx-border-color: -fx-color-accent;
+    -fx-border-radius: 10;
+    -fx-border-width: 1.5;
+}
+.asset-row-icon {
+    -fx-background-color: -fx-color-text-primary;
+    -fx-background-radius: 8;
+    -fx-min-width: 28; -fx-min-height: 28;
+    -fx-max-width: 28; -fx-max-height: 28;
+    -fx-alignment: center;
 }
 
 /* =========================================================

@@ -223,6 +223,11 @@ public class AssetServiceImpl implements AssetService {
         return assetRepository.findById(id).map(AssetMapper.INSTANCE::toDto);
     }
 
+    @Override
+    public Set<String> supportedForexCurrencies() {
+        return SUPPORTED_FOREX_CURRENCIES;
+    }
+
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

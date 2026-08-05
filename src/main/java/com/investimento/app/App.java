@@ -19,10 +19,14 @@ import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.repository.RateHistoryRepositoryImpl;
 import com.investimento.app.repository.TransactionRepository;
 import com.investimento.app.repository.TransactionRepositoryImpl;
+import com.investimento.app.service.AssetService;
+import com.investimento.app.service.AssetServiceImpl;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.MarketServiceImpl;
 import com.investimento.app.service.PositionService;
 import com.investimento.app.service.PositionServiceImpl;
+import com.investimento.app.service.TransactionService;
+import com.investimento.app.service.TransactionServiceImpl;
 import com.investimento.app.ui.Shell;
 import javafx.application.Application;
 import javafx.scene.Scene;
@@ -90,8 +94,11 @@ public class App extends Application {
         PositionService positionService = new PositionServiceImpl(assetRepository, transactionRepository,
                 marketService, quoteHistoryRepository, rateHistoryRepository, indicatorHistoryRepository);
 
-        return new Shell(marketService, positionService, assetRepository, portfolioSnapshotRepository,
-                rateHistoryRepository);
+        AssetService assetService = new AssetServiceImpl(assetRepository, brapiClient, coinGeckoClient, marketService);
+        TransactionService transactionService = new TransactionServiceImpl(transactionRepository, assetRepository);
+
+        return new Shell(marketService, positionService, assetService, transactionService, brapiClient, coinGeckoClient,
+                assetRepository, portfolioSnapshotRepository, rateHistoryRepository);
     }
 
     private void loadFonts() {
