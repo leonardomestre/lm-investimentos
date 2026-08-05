@@ -6,6 +6,7 @@ import com.investimento.app.dto.CreateAssetRequest;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Regra de validação e derivação de campos do cadastro de ativos (RF01) —
@@ -30,4 +31,12 @@ public interface AssetService {
     List<AssetDTO> listAssets(boolean includeInactive);
 
     Optional<AssetDTO> findById(long id);
+
+    /**
+     * Os 8 códigos ISO que a HG Brasil cobre para câmbio (RF01, ATV-13) —
+     * exposto para a UI popular o dropdown de "moeda de referência" de
+     * {@code FOREIGN_CURRENCY} sem duplicar a lista fixa localmente (mesmo
+     * padrão de {@code CoinGeckoClient.supportedSymbols()}, ATV-08).
+     */
+    Set<String> supportedForexCurrencies();
 }

@@ -1,10 +1,14 @@
 package com.investimento.app.ui;
 
+import com.investimento.app.api.brapi.BrapiClient;
+import com.investimento.app.api.coingecko.CoinGeckoClient;
 import com.investimento.app.repository.AssetRepository;
 import com.investimento.app.repository.PortfolioSnapshotRepository;
 import com.investimento.app.repository.RateHistoryRepository;
+import com.investimento.app.service.AssetService;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.service.TransactionService;
 import com.investimento.app.ui.screens.DashboardView;
 import com.investimento.app.ui.screens.FixedIncomeView;
 import com.investimento.app.ui.screens.ForexCryptoView;
@@ -28,9 +32,10 @@ import java.util.Map;
  * forem implementadas nas proximas atividades.</p>
  *
  * <p>Recebe do {@code App} (composition root, ATV-12) as dependencias que as
- * telas reais precisam - por enquanto so o {@code DashboardView} usa; as
- * demais 6 telas continuam stubs sem dependencia (ATV-13 em diante passam a
- * receber o que precisarem, do mesmo jeito).</p>
+ * telas reais precisam - {@code DashboardView} (ATV-12) e {@code
+ * RegistrationView} (ATV-13); as demais 5 telas continuam stubs sem
+ * dependencia (ATV-14 em diante passam a receber o que precisarem, do mesmo
+ * jeito).</p>
  */
 public class Shell extends BorderPane {
 
@@ -39,6 +44,10 @@ public class Shell extends BorderPane {
 
     public Shell(MarketService marketService,
                  PositionService positionService,
+                 AssetService assetService,
+                 TransactionService transactionService,
+                 BrapiClient brapiClient,
+                 CoinGeckoClient coinGeckoClient,
                  AssetRepository assetRepository,
                  PortfolioSnapshotRepository portfolioSnapshotRepository,
                  RateHistoryRepository rateHistoryRepository) {
@@ -47,7 +56,7 @@ public class Shell extends BorderPane {
         views.put(Screen.STOCKS_FIIS, new StocksFiisView());
         views.put(Screen.FIXED_INCOME, new FixedIncomeView());
         views.put(Screen.FOREX_CRYPTO, new ForexCryptoView());
-        views.put(Screen.REGISTRATION, new RegistrationView());
+        views.put(Screen.REGISTRATION, new RegistrationView(assetService, transactionService, brapiClient, coinGeckoClient));
         views.put(Screen.TAX_HISTORY, new TaxHistoryView());
         views.put(Screen.SETTINGS, new SettingsView());
 
