@@ -68,6 +68,24 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public List<Transaction> listByPeriod(LocalDate start, LocalDate end) {
+        String sql = "SELECT * FROM transactions WHERE date BETWEEN ? AND ? ORDER BY date";
+        List<Transaction> result = new ArrayList<>();
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, start.toString());
+            ps.setString(2, end.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(map(rs));
+                }
+            }
+            return result;
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao listar Transactions por periodo", e);
+        }
+    }
+
+    @Override
     public Transaction insert(Transaction transaction) {
         String sql = "INSERT INTO transactions (asset_id, operation_type, date, quantity, unit_price, fees, "
                 + "notes, created_at) VALUES (?,?,?,?,?,?,?,?)";
