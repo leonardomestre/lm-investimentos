@@ -63,13 +63,21 @@ public class ForexCryptoView implements ScreenView {
     // e não lê variável -fx-color-* do CSS (mesma nota das ATV-12/14/15).
     private static final Color COLOR_CHART_GRID = Color.web("#eeebe5");
     private static final Color COLOR_CHART_AXIS_TEXT = Color.web("#a2a8ab");
-    private static final Color COLOR_CHART_LINE_PRIMARY = Color.web("#2f6f5e");
-    private static final Color COLOR_CHART_AREA = Color.web("#3d9c78", 0.1);
-    private static final Color COLOR_AVG_PRICE_LINE = Color.web("#c9a227");
-    // Tokens fixos de categoria (theme.css .root) — usados na barra
-    // proporcional cripto/câmbio do card de resumo escuro.
+    private static final Color COLOR_CHART_LINE_FOREX = Color.web("#2f6f5e"); // accent-strong — sem exemplo de câmbio no template, mesma cor padrão das demais telas
+    private static final Color COLOR_CHART_LINE_CRYPTO = Color.web("#c9a227"); // neutral-warn — cor da linha "Cotação (CoinGecko)" no template (tela 05)
+    // Linha de referência "preço médio de compra": no template desta tela ela é
+    // cinza neutro (text-faint), diferente das telas 03/04 que usam âmbar — e
+    // o gráfico do template aqui NÃO tem área preenchida sob a linha principal
+    // (ver Telas.dc.html linhas 861-869), por isso nenhuma constante de área.
+    private static final Color COLOR_AVG_PRICE_LINE = Color.web("#8a9196");
+    // Tokens de categoria usados na barra proporcional cripto/câmbio do card de
+    // resumo escuro — NÃO são os mesmos tokens fixos de categoria do donut de
+    // diversificação (paleta.md): o template desta tela (linha 895) mostra o
+    // segmento de câmbio em accent puro (#3d9c78), não em category-cambio/loss
+    // (#b3402f) — confirmado também pelo badge "Câmbio" da tabela desta mesma
+    // tela (verde/accent-strong, nunca vermelho).
     private static final Color COLOR_CATEGORY_CRIPTO = Color.web("#c9a227");
-    private static final Color COLOR_CATEGORY_CAMBIO = Color.web("#b3402f");
+    private static final Color COLOR_CATEGORY_CAMBIO = Color.web("#3d9c78");
 
     private static final Locale PT_BR = new Locale("pt", "BR");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -434,18 +442,21 @@ public class ForexCryptoView implements ScreenView {
             return;
         }
 
+        Color lineColor = crypto ? COLOR_CHART_LINE_CRYPTO : COLOR_CHART_LINE_FOREX;
         Canvas canvas = new Canvas(640, 220);
         canvas.setId("assetChartCanvas");
-        drawAssetChart(canvas, history, selected.averagePrice());
-        chartCardBody.getChildren().addAll(canvas, buildChartLegend(crypto));
+        drawAssetChart(canvas, history, selected.averagePrice(), lineColor);
+        chartCardBody.getChildren().addAll(canvas, buildChartLegend(crypto, lineColor));
     }
 
     /**
      * Mesma técnica de {@code Canvas}/{@code GraphicsContext} já usada nas
-     * ATV-12/14/15 — grade, área sob a linha, linha secundária (tracejada,
-     * preço médio de compra), linha principal, ponto final, labels de eixo.
+     * ATV-12/14/15 — grade, linha secundária (tracejada, preço médio de
+     * compra), linha principal, ponto final, labels de eixo. Diferente das
+     * outras telas, o template desta tela (Telas.dc.html linhas 861-869) não
+     * preenche área sob a linha principal — por isso não há esse passo aqui.
      */
-    private void drawAssetChart(Canvas canvas, List<QuoteHistory> history, double averagePrice) {
+    private void drawAssetChart(Canvas canvas, List<QuoteHistory> history, double averagePrice, Color lineColor) {
         GraphicsContext gc = canvas.getGraphicsContext2D();
         double width = canvas.getWidth();
         double height = canvas.getHeight();
@@ -494,17 +505,6 @@ public class ForexCryptoView implements ScreenView {
             gc.fillText(formatCompact(value), 0, y + 4);
         }
 
-        double[] areaX = new double[n + 2];
-        double[] areaY = new double[n + 2];
-        System.arraycopy(xs, 0, areaX, 0, n);
-        System.arraycopy(ys, 0, areaY, 0, n);
-        areaX[n] = xs[n - 1];
-        areaY[n] = topPad + plotHeight;
-        areaX[n + 1] = xs[0];
-        areaY[n + 1] = topPad + plotHeight;
-        gc.setFill(COLOR_CHART_AREA);
-        gc.fillPolygon(areaX, areaY, n + 2);
-
         gc.setStroke(COLOR_AVG_PRICE_LINE);
         gc.setLineWidth(2);
         gc.setLineDashes(6, 5);
@@ -513,11 +513,11 @@ public class ForexCryptoView implements ScreenView {
         gc.setFill(COLOR_AVG_PRICE_LINE);
         gc.fillText("PM " + formatCompact(averagePrice), width - rightPad - 60, avgY - 6);
 
-        gc.setStroke(COLOR_CHART_LINE_PRIMARY);
+        gc.setStroke(lineColor);
         gc.setLineWidth(2.5);
         gc.strokePolyline(xs, ys, n);
 
-        gc.setFill(COLOR_CHART_LINE_PRIMARY);
+        gc.setFill(lineColor);
         gc.fillOval(xs[n - 1] - 4.5, ys[n - 1] - 4.5, 9, 9);
 
         gc.setFill(COLOR_CHART_AXIS_TEXT);
@@ -528,8 +528,8 @@ public class ForexCryptoView implements ScreenView {
         }
     }
 
-    private HBox buildChartLegend(boolean crypto) {
-        HBox item1 = legendItem("Cotação (" + (crypto ? "CoinGecko" : "HG Brasil") + ")", COLOR_CHART_LINE_PRIMARY);
+    private HBox buildChartLegend(boolean crypto, Color lineColor) {
+        HBox item1 = legendItem("Cotação (" + (crypto ? "CoinGecko" : "HG Brasil") + ")", lineColor);
         HBox item2 = legendItem("Preço médio de compra", COLOR_AVG_PRICE_LINE);
         Label caption = new Label(crypto
                 ? "Primeiros até 365 dias vindos da CoinGecko; depois, histórico local."

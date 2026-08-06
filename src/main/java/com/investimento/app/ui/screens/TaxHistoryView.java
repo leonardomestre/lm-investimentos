@@ -161,9 +161,12 @@ public class TaxHistoryView implements ScreenView {
         VBox titleBox = new VBox(4, title, subtitleLabel);
         HBox.setHgrow(titleBox, Priority.ALWAYS);
 
+        // No template esse botao e um pill secundario com borda (o preenchido/
+        // escuro e reservado para "Gerar PDF do ano", nao implementado nesta
+        // tela) - ver Telas.dc.html linhas 973-974.
         Button exportButton = new Button("Exportar CSV");
         exportButton.setId("exportCsvButton");
-        exportButton.getStyleClass().add("button-primary");
+        exportButton.getStyleClass().add("pill-secondary");
         exportButton.setOnAction(e -> exportCsv());
 
         csvCaptionLabel.getStyleClass().add("content-card-subtitle");

@@ -77,6 +77,7 @@ public class StocksFiisView implements ScreenView {
     private static final Color COLOR_CHART_LINE_PRIMARY = Color.web("#2f6f5e");
     private static final Color COLOR_CHART_AREA = Color.web("#3d9c78", 0.1);
     private static final Color COLOR_AVG_PRICE_LINE = Color.web("#c9a227"); // neutral-warn, mesma cor da linha "PM" do template
+    private static final Color COLOR_AVG_PRICE_TEXT = Color.web("#a08316"); // neutral-warn-dark, cor do texto "PM ..." no template (mais escura que a linha, para legibilidade)
 
     private static final Locale PT_BR = new Locale("pt", "BR");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -552,7 +553,7 @@ public class StocksFiisView implements ScreenView {
         gc.setLineDashes(6, 5);
         gc.strokeLine(leftPad, avgY, width - rightPad, avgY);
         gc.setLineDashes((double[]) null);
-        gc.setFill(COLOR_AVG_PRICE_LINE);
+        gc.setFill(COLOR_AVG_PRICE_TEXT);
         gc.fillText("PM " + formatDecimal(averagePrice, 2), width - rightPad - 60, avgY - 6);
 
         // 4. linha principal

@@ -76,7 +76,7 @@ public class RegistrationView implements ScreenView {
 
     // ---- Formulário de cadastro de ativo -------------------------------
     private final ComboBox<AssetType> typeCombo = new ComboBox<>();
-    private final Label categoryValueLabel = new Label("--");
+    private final Label categoryValueLabel = buildCategoryValueLabel();
     private final VBox conditionalContainer = new VBox(12);
     private final TextField displayNameField = new TextField();
     private final VBox currencyFieldGroup;
@@ -238,7 +238,7 @@ public class RegistrationView implements ScreenView {
         cancelButton.getStyleClass().add("pill-secondary");
         cancelButton.setOnAction(e -> clearAssetForm());
 
-        saveAssetButton.getStyleClass().add("button-primary");
+        saveAssetButton.getStyleClass().add("button-accent-strong");
         saveAssetButton.setId("saveAssetButton");
         saveAssetButton.setOnAction(e -> handleSaveAsset());
 
@@ -1180,6 +1180,14 @@ public class RegistrationView implements ScreenView {
         Label label = new Label();
         label.getStyleClass().add("form-info-label");
         label.setWrapText(true);
+        return label;
+    }
+
+    /** Caixa não editável, mesmo visual de {@code .text-field} (template mostra "Categoria" como um campo, não texto solto). */
+    private static Label buildCategoryValueLabel() {
+        Label label = new Label("--");
+        label.getStyleClass().add("text-field");
+        label.setAlignment(Pos.CENTER_LEFT);
         return label;
     }
 

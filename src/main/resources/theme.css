@@ -197,6 +197,33 @@
     -fx-cursor: hand;
 }
 
+/* ATV-13 (Cadastro) — "Salvar ativo": no template esse botão é verde
+   (accent-strong), diferente do "Atualizar cotações agora" do Dashboard
+   (button-primary, fundo escuro) — mesmo padrao de botao/radius/padding,
+   só a cor de fundo muda, entao nao reaproveita .button-primary. */
+.button-accent-strong {
+    -fx-background-color: -fx-color-accent-strong;
+    -fx-background-radius: 10;
+    -fx-padding: 11 18;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: white;
+    -fx-cursor: hand;
+}
+
+/* Botão "de ação viva" dentro de card escuro (ex.: "Salvar transação",
+   "Exportar backup agora", "Marcar como paga") — bg accent + texto on-accent,
+   diferente de .button-accent-strong (branco sobre verde escuro). */
+.button-accent {
+    -fx-background-color: -fx-color-accent;
+    -fx-background-radius: 10;
+    -fx-padding: 11 18;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: -fx-color-on-accent;
+    -fx-cursor: hand;
+}
+
 /* =========================================================
    KPI card
    ========================================================= */
@@ -545,6 +572,33 @@
     -fx-min-width: 28; -fx-min-height: 28;
     -fx-max-width: 28; -fx-max-height: 28;
     -fx-alignment: center;
+}
+
+/* =========================================================
+   Toggle switch (ex.: "Ocultar valores no dashboard" — Configurações)
+   ========================================================= */
+
+.toggle-track {
+    -fx-background-color: -fx-color-border-pill;
+    -fx-background-radius: 14;
+    -fx-min-width: 46; -fx-pref-width: 46; -fx-max-width: 46;
+    -fx-min-height: 26; -fx-pref-height: 26; -fx-max-height: 26;
+    -fx-padding: 3;
+    -fx-cursor: hand;
+}
+.toggle-track-on {
+    -fx-background-color: -fx-color-accent-strong;
+    -fx-background-radius: 14;
+    -fx-min-width: 46; -fx-pref-width: 46; -fx-max-width: 46;
+    -fx-min-height: 26; -fx-pref-height: 26; -fx-max-height: 26;
+    -fx-padding: 3;
+    -fx-cursor: hand;
+}
+.toggle-thumb {
+    -fx-background-color: white;
+    -fx-background-radius: 10;
+    -fx-min-width: 20; -fx-pref-width: 20; -fx-max-width: 20;
+    -fx-min-height: 20; -fx-pref-height: 20; -fx-max-height: 20;
 }
 
 /* =========================================================
