@@ -23,6 +23,8 @@ import com.investimento.app.repository.TransactionRepository;
 import com.investimento.app.repository.TransactionRepositoryImpl;
 import com.investimento.app.service.AssetService;
 import com.investimento.app.service.AssetServiceImpl;
+import com.investimento.app.service.IncomeTaxService;
+import com.investimento.app.service.IncomeTaxServiceImpl;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.MarketServiceImpl;
 import com.investimento.app.service.PositionService;
@@ -99,10 +101,11 @@ public class App extends Application {
 
         AssetService assetService = new AssetServiceImpl(assetRepository, brapiClient, coinGeckoClient, marketService);
         TransactionService transactionService = new TransactionServiceImpl(transactionRepository, assetRepository);
+        IncomeTaxService incomeTaxService = new IncomeTaxServiceImpl(assetRepository, positionService);
 
-        return new Shell(marketService, positionService, assetService, transactionService, brapiClient, coinGeckoClient,
-                assetRepository, portfolioSnapshotRepository, rateHistoryRepository, quoteHistoryRepository,
-                distributionRepository);
+        return new Shell(marketService, positionService, assetService, transactionService, incomeTaxService,
+                brapiClient, coinGeckoClient, assetRepository, portfolioSnapshotRepository, rateHistoryRepository,
+                quoteHistoryRepository, distributionRepository);
     }
 
     private void loadFonts() {
