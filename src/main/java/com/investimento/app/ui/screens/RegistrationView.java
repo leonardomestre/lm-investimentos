@@ -13,6 +13,7 @@ import com.investimento.app.dto.CreateTransactionRequest;
 import com.investimento.app.dto.TransactionDTO;
 import com.investimento.app.service.AssetService;
 import com.investimento.app.service.TransactionService;
+import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.service.ValidationException;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
@@ -76,7 +77,7 @@ public class RegistrationView implements ScreenView {
 
     // ---- Formulário de cadastro de ativo -------------------------------
     private final ComboBox<AssetType> typeCombo = new ComboBox<>();
-    private final Label categoryValueLabel = new Label("--");
+    private final Label categoryValueLabel = buildCategoryValueLabel();
     private final VBox conditionalContainer = new VBox(12);
     private final TextField displayNameField = new TextField();
     private final VBox currencyFieldGroup;
@@ -159,7 +160,7 @@ public class RegistrationView implements ScreenView {
 
         contentBody = new VBox(20);
         contentBody.setPadding(new Insets(24, 28, 28, 28));
-        contentBody.getChildren().setAll(buildTopRow(), buildTransactionsTableCard());
+        contentBody.getChildren().setAll(brlNoticeLabel, buildTopRow(), buildTransactionsTableCard());
 
         ScrollPane scrollPane = new ScrollPane(contentBody);
         scrollPane.setFitToWidth(true);
@@ -182,6 +183,34 @@ public class RegistrationView implements ScreenView {
     @Override
     public void onShow() {
         refreshAssets();
+    }
+
+
+    /**
+     * Aviso exibido so quando a moeda principal (Configuracoes) nao e o real.
+     * Esta tela fica sempre em BRL de proposito — ver {@link CurrencyDisplay}
+     * para o porque de cada uma das duas telas que nao convertem.
+     */
+    private final Label brlNoticeLabel = buildBrlNoticeLabel();
+
+    private static Label buildBrlNoticeLabel() {
+        Label label = new Label();
+        label.setId("brlNoticeLabel");
+        label.getStyleClass().add("form-info-label");
+        label.setWrapText(true);
+        label.setVisible(false);
+        label.setManaged(false);
+        return label;
+    }
+
+    /** Liga/desliga o aviso acima conforme a moeda principal em vigor. */
+    private void refreshBrlNotice(String reason) {
+        boolean show = !CurrencyDisplay.isBrl();
+        brlNoticeLabel.setText(show
+                ? "Moeda principal: " + CurrencyDisplay.current().label() + ". " + reason
+                : "");
+        brlNoticeLabel.setVisible(show);
+        brlNoticeLabel.setManaged(show);
     }
 
     // =====================================================================
@@ -238,7 +267,7 @@ public class RegistrationView implements ScreenView {
         cancelButton.getStyleClass().add("pill-secondary");
         cancelButton.setOnAction(e -> clearAssetForm());
 
-        saveAssetButton.getStyleClass().add("button-primary");
+        saveAssetButton.getStyleClass().add("button-accent-strong");
         saveAssetButton.setId("saveAssetButton");
         saveAssetButton.setOnAction(e -> handleSaveAsset());
 
@@ -654,6 +683,11 @@ public class RegistrationView implements ScreenView {
     }
 
     private void refreshAssets() {
+        // Entrada de dado: preco unitario e taxas sao digitados em reais
+        // (transactions nao tem coluna de moeda). Mostrar o total em outra
+        // moeda ao lado de campos que esperam real induziria a erro.
+        refreshBrlNotice("preço unitário, taxas e total continuam em reais neste formulário.");
+
         cachedAssets = assetService.listAssets(false);
         int totalTransactions = transactionService.listAll().size();
         subtitleLabel.setText(cachedAssets.size() + " ativos cadastrados · " + totalTransactions + " lançamentos");
@@ -688,7 +722,9 @@ public class RegistrationView implements ScreenView {
     private HBox buildAssetRow(AssetDTO asset) {
         Label icon = new Label(categoryAbbreviation(asset.category()));
         icon.getStyleClass().add("asset-row-icon");
-        icon.setStyle("-fx-text-fill: white; -fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 10px;");
+        // Classe de CSS em vez de -fx-text-fill:white inline: o fundo do
+        // icone e -fx-color-fill-inverse, que inverte no tema escuro.
+        icon.getStyleClass().add("asset-row-icon-text");
         StackPane iconStack = new StackPane(icon);
         iconStack.getStyleClass().add("asset-row-icon");
 
@@ -1180,6 +1216,14 @@ public class RegistrationView implements ScreenView {
         Label label = new Label();
         label.getStyleClass().add("form-info-label");
         label.setWrapText(true);
+        return label;
+    }
+
+    /** Caixa não editável, mesmo visual de {@code .text-field} (template mostra "Categoria" como um campo, não texto solto). */
+    private static Label buildCategoryValueLabel() {
+        Label label = new Label("--");
+        label.getStyleClass().add("text-field");
+        label.setAlignment(Pos.CENTER_LEFT);
         return label;
     }
 

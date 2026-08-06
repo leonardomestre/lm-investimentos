@@ -14,6 +14,9 @@ import com.investimento.app.repository.DistributionRepository;
 import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.CurrencyDisplay;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
 import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
@@ -70,13 +73,15 @@ import java.util.Optional;
  */
 public class StocksFiisView implements ScreenView {
 
-    // Cores duplicadas de theme.css/paleta.md — Canvas desenha imperativamente
-    // e não lê variável -fx-color-* do CSS (mesma nota da ATV-12).
-    private static final Color COLOR_CHART_GRID = Color.web("#eeebe5");
-    private static final Color COLOR_CHART_AXIS_TEXT = Color.web("#a2a8ab");
-    private static final Color COLOR_CHART_LINE_PRIMARY = Color.web("#2f6f5e");
-    private static final Color COLOR_CHART_AREA = Color.web("#3d9c78", 0.1);
-    private static final Color COLOR_AVG_PRICE_LINE = Color.web("#c9a227"); // neutral-warn, mesma cor da linha "PM" do template
+    /**
+     * Cores de grafico do tema ativo (ver {@link ThemeManager}) — a linha
+     * "PM" usa {@code neutralWarn}, e o texto "PM ..." ao lado dela usa
+     * {@code neutralWarnDark}, mais escuro que a linha para legibilidade,
+     * exatamente como no template.
+     */
+    private static Theme theme() {
+        return ThemeManager.current();
+    }
 
     private static final Locale PT_BR = new Locale("pt", "BR");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -263,7 +268,10 @@ public class StocksFiisView implements ScreenView {
                 .sorted(Comparator.comparing((Position p) -> p.asset().category())
                         .thenComparing(Comparator.comparingDouble(Position::currentValue).reversed()))
                 .toList();
-        cachedSummary = positionService.calculatePortfolioSummary();
+        // Resumo montado sobre allPositions (carteira inteira, nao a lista ja
+        // filtrada por categoria) — a versao sem argumento recalcularia todas
+        // as posicoes de novo.
+        cachedSummary = positionService.calculatePortfolioSummary(allPositions);
         cachedDailyChanges = marketService.getDailyChanges(assets);
 
         if (selectedAssetId == null || cachedPositions.stream().noneMatch(p -> p.asset().id().equals(selectedAssetId))) {
@@ -522,16 +530,16 @@ public class StocksFiisView implements ScreenView {
         double avgY = topPad + plotHeight * (1 - (averagePrice - rangeMin) / (rangeMax - rangeMin));
 
         // 1. grade horizontal + 2. labels eixo Y
-        gc.setStroke(COLOR_CHART_GRID);
+        gc.setStroke(theme().chartGrid());
         gc.setLineWidth(1);
         gc.setFont(Font.font("IBM Plex Mono", 10));
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int gridLines = 5;
         for (int i = 0; i < gridLines; i++) {
             double y = topPad + plotHeight * i / (double) (gridLines - 1);
             gc.strokeLine(leftPad, y, width - rightPad, y);
             double value = rangeMax - (rangeMax - rangeMin) * i / (double) (gridLines - 1);
-            gc.fillText(formatDecimal(value, 0), 0, y + 4);
+            gc.fillText(formatMoney(value, 0), 0, y + 4);
         }
 
         // 3. area sob a linha principal
@@ -543,29 +551,29 @@ public class StocksFiisView implements ScreenView {
         areaY[n] = topPad + plotHeight;
         areaX[n + 1] = xs[0];
         areaY[n + 1] = topPad + plotHeight;
-        gc.setFill(COLOR_CHART_AREA);
+        gc.setFill(theme().chartArea());
         gc.fillPolygon(areaX, areaY, n + 2);
 
         // 5. linha secundaria (preco medio de compra, tracejada)
-        gc.setStroke(COLOR_AVG_PRICE_LINE);
+        gc.setStroke(theme().neutralWarn());
         gc.setLineWidth(2);
         gc.setLineDashes(6, 5);
         gc.strokeLine(leftPad, avgY, width - rightPad, avgY);
         gc.setLineDashes((double[]) null);
-        gc.setFill(COLOR_AVG_PRICE_LINE);
-        gc.fillText("PM " + formatDecimal(averagePrice, 2), width - rightPad - 60, avgY - 6);
+        gc.setFill(theme().neutralWarnDark());
+        gc.fillText("PM " + formatMoney(averagePrice, 2), width - rightPad - 60, avgY - 6);
 
         // 4. linha principal
-        gc.setStroke(COLOR_CHART_LINE_PRIMARY);
+        gc.setStroke(theme().chartLinePrimary());
         gc.setLineWidth(2.5);
         gc.strokePolyline(xs, ys, n);
 
         // 6. ponto final destacado
-        gc.setFill(COLOR_CHART_LINE_PRIMARY);
+        gc.setFill(theme().chartLinePrimary());
         gc.fillOval(xs[n - 1] - 4.5, ys[n - 1] - 4.5, 9, 9);
 
         // 7. labels eixo X (inicio, ~1/4, meio, ~3/4, fim)
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int[] labelIdx = n <= 5 ? intRange(n) : new int[]{0, n / 4, n / 2, (3 * n) / 4, n - 1};
         for (int idx : labelIdx) {
             LocalDate d = history.get(idx).getDate();
@@ -574,8 +582,8 @@ public class StocksFiisView implements ScreenView {
     }
 
     private HBox buildChartLegend() {
-        HBox item1 = legendItem("Preço de mercado (brapi.dev)", COLOR_CHART_LINE_PRIMARY);
-        HBox item2 = legendItem("Preço médio de compra", COLOR_AVG_PRICE_LINE);
+        HBox item1 = legendItem("Preço de mercado (brapi.dev)", theme().chartLinePrimary());
+        HBox item2 = legendItem("Preço médio de compra", theme().neutralWarn());
         Label caption = new Label("Histórico importado no cadastro e complementado pelas consultas periódicas.");
         caption.setStyle("-fx-font-family: 'Manrope Medium'; -fx-font-size: 12px; -fx-text-fill: -fx-color-text-faint;");
         Region spacer = new Region();
@@ -645,7 +653,7 @@ public class StocksFiisView implements ScreenView {
         grid.add(tableHeaderCell("PREÇO MÉDIO", HPos.RIGHT), 3, 0);
         grid.add(tableHeaderCell("PREÇO ATUAL", HPos.RIGHT), 4, 0);
         grid.add(tableHeaderCell("GANHO %", HPos.RIGHT), 5, 0);
-        grid.add(tableHeaderCell("GANHO R$", HPos.RIGHT), 6, 0);
+        grid.add(tableHeaderCell("GANHO " + CurrencyDisplay.symbol(), HPos.RIGHT), 6, 0);
         grid.add(tableHeaderCell("VALOR ATUAL", HPos.RIGHT), 7, 0);
 
         for (int i = 0; i < filtered.size(); i++) {
@@ -659,13 +667,13 @@ public class StocksFiisView implements ScreenView {
             Node tickerNode = tickerCell(p, last, selected);
             Label typeNode = tableCell(assetTypeShortLabel(p.asset().type()), "table-row-secondary", HPos.LEFT, last, selected);
             Label qtyNode = tableCell(formatQuantity(p.currentQuantity()), "table-cell-numeric", HPos.RIGHT, last, selected);
-            Label pmNode = tableCell(formatDecimal(p.averagePrice(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
-            Label paNode = tableCell(formatDecimal(unitPrice, 2), "table-cell-numeric", HPos.RIGHT, last, selected);
+            Label pmNode = tableCell(formatMoney(p.averagePrice(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
+            Label paNode = tableCell(formatMoney(unitPrice, 2), "table-cell-numeric", HPos.RIGHT, last, selected);
             Label pctNode = tableCell(formatSignedPercent(p.gainLossPercent()),
                     p.gainLossPercent() >= 0 ? "table-cell-gain" : "table-cell-loss", HPos.RIGHT, last, selected);
             Label amtNode = tableCell(formatSignedNumber(p.gainLossAmount(), 2),
                     p.gainLossAmount() >= 0 ? "table-cell-gain" : "table-cell-loss", HPos.RIGHT, last, selected);
-            Label valNode = tableCell(formatDecimal(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
+            Label valNode = tableCell(formatMoney(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
 
             long assetId = p.asset().id();
             for (Node n : List.of(tickerNode, typeNode, qtyNode, pmNode, paNode, pctNode, amtNode, valNode)) {
@@ -903,7 +911,7 @@ public class StocksFiisView implements ScreenView {
             grid.add(tableCell(assetLabel(r.asset()), "table-row-primary", HPos.LEFT, last, false), 0, row);
             grid.add(tableCell(distributionTypeLabel(r.distribution().getType()), "table-row-secondary", HPos.LEFT, last, false), 1, row);
             grid.add(tableCell(formatDate(r.distribution().getPaymentDate()), "table-row-secondary", HPos.LEFT, last, false), 2, row);
-            grid.add(tableCell(formatDecimal(r.distribution().getValue(), 2), "table-cell-gain", HPos.RIGHT, last, false), 3, row);
+            grid.add(tableCell(formatMoney(r.distribution().getValue(), 2), "table-cell-gain", HPos.RIGHT, last, false), 3, row);
             grid.add(deleteActionCell(r, last), 4, row);
         }
 
@@ -1151,6 +1159,15 @@ public class StocksFiisView implements ScreenView {
         return formatDecimal(qty, qty == Math.floor(qty) ? 0 : 2);
     }
 
+    /**
+     * Valor monetario sem simbolo, ja convertido para a moeda principal
+     * (Configuracoes > Preferencias). Todo valor que o app calcula e BRL — a
+     * conversao acontece so aqui, na formatacao. Ver {@link CurrencyDisplay}.
+     */
+    private static String formatMoney(double brlValue, int fractionDigits) {
+        return formatDecimal(CurrencyDisplay.convert(brlValue), fractionDigits);
+    }
+
     private static String formatDecimal(double value, int fractionDigits) {
         NumberFormat nf = NumberFormat.getNumberInstance(PT_BR);
         nf.setMinimumFractionDigits(fractionDigits);
@@ -1159,17 +1176,17 @@ public class StocksFiisView implements ScreenView {
     }
 
     private static String formatCurrency(double value) {
-        return "R$ " + formatDecimal(value, 2);
+        return CurrencyDisplay.symbol() + " " + formatMoney(value, 2);
     }
 
     private static String formatSignedCurrency(double value) {
         String sign = value < 0 ? "− " : "+ ";
-        return sign + "R$ " + formatDecimal(Math.abs(value), 2);
+        return sign + CurrencyDisplay.symbol() + " " + formatMoney(Math.abs(value), 2);
     }
 
     private static String formatSignedNumber(double value, int fractionDigits) {
         String sign = value < 0 ? "−" : "+";
-        return sign + formatDecimal(Math.abs(value), fractionDigits);
+        return sign + formatMoney(Math.abs(value), fractionDigits);
     }
 
     private static String formatSignedPercent(double value) {

@@ -36,8 +36,12 @@ import com.investimento.app.service.PositionService;
 import com.investimento.app.service.PositionServiceImpl;
 import com.investimento.app.service.TransactionService;
 import com.investimento.app.service.TransactionServiceImpl;
+import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.ui.Screen;
 import com.investimento.app.ui.Shell;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
+import com.investimento.app.ui.screens.SettingsView;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.text.Font;
@@ -89,7 +93,14 @@ public class App extends Application {
         Shell shell = buildShell(connection, Screen.DASHBOARD, () -> rebuildShell(stage));
 
         Scene scene = new Scene(shell, 1440, 900);
-        scene.getStylesheets().add(getClass().getResource("/theme.css").toExternalForm());
+        // Tema lido de settings ANTES do primeiro show: abrir sempre no claro
+        // e so depois trocar faria a janela piscar em branco para quem usa o
+        // tema escuro. ThemeManager e quem monta a lista de stylesheets
+        // (theme.css + theme-dark.css opcional) — nao adicionar theme.css
+        // aqui por fora, senao ele entra duplicado.
+        Theme theme = ThemeManager.fromSettingValue(
+                new SettingRepositoryImpl(connection).get(SettingsView.SETTING_THEME, null));
+        ThemeManager.install(scene, theme);
 
         stage.setTitle("Carteira — LM Investimentos");
         stage.setScene(scene);
@@ -119,11 +130,14 @@ public class App extends Application {
         DistributionRepository distributionRepository = new DistributionRepositoryImpl(connection);
         SettingRepository settingRepository = new SettingRepositoryImpl(connection);
 
-        // ATV-18: settings (banco) > variavel de ambiente > fallback do
-        // projeto - mesmos fallbacks ja usados pelos construtores sem
-        // argumento de HgBrasilClientImpl/BrapiClientImpl (ATV-03/04).
-        String hgBrasilKey = ApiKeyResolver.resolve(settingRepository, "hgbrasil.apiKey", "HG_BRASIL_KEY", "ee3b78db");
-        String brapiToken = ApiKeyResolver.resolve(settingRepository, "brapi.token", "BRAPI_TOKEN", "jS1ByoxrxvQAaFBZmcZMU6");
+        // ATV-18: settings (banco, tela de Configuracoes) > variavel de
+        // ambiente. NAO existe mais fallback embutido: este repositorio e
+        // publico, entao uma chave literal aqui e uma credencial vazada. Sem
+        // nenhuma das 2 fontes, o cliente lanca a excecao de dominio com uma
+        // mensagem dizendo onde configurar, e o app segue funcionando no que
+        // nao depende de rede (ver HgBrasilClientImpl/BrapiClientImpl).
+        String hgBrasilKey = ApiKeyResolver.resolve(settingRepository, "hgbrasil.apiKey", "HG_BRASIL_KEY", null);
+        String brapiToken = ApiKeyResolver.resolve(settingRepository, "brapi.token", "BRAPI_TOKEN", null);
 
         HgBrasilClient hgBrasilClient = new HgBrasilClientImpl(hgBrasilKey);
         BrapiClient brapiClient = new BrapiClientImpl(brapiToken);
@@ -140,10 +154,16 @@ public class App extends Application {
         IncomeTaxService incomeTaxService = new IncomeTaxServiceImpl(assetRepository, positionService);
         BackupService backupService = new BackupServiceImpl();
 
+        // Moeda principal de exibicao (Configuracoes > Preferencias) — resolve
+        // a taxa uma vez aqui para as telas ja abrirem na moeda certa; o
+        // Shell reconfigura a cada navegacao. Sem custo nenhum quando a moeda
+        // e BRL (o padrao): nao ha chamada de rede. Ver CurrencyDisplay.
+        CurrencyDisplay.configure(settingRepository, marketService);
+
         return new Shell(marketService, positionService, assetService, transactionService, incomeTaxService,
-                brapiClient, coinGeckoClient, assetRepository, portfolioSnapshotRepository, rateHistoryRepository,
-                quoteHistoryRepository, distributionRepository, settingRepository, backupService, initialScreen,
-                onDataRestored);
+                hgBrasilClient, brapiClient, coinGeckoClient, assetRepository, portfolioSnapshotRepository,
+                rateHistoryRepository, quoteHistoryRepository, distributionRepository, settingRepository,
+                backupService, initialScreen, onDataRestored);
     }
 
     private void loadFonts() {

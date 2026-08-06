@@ -20,11 +20,13 @@ import com.investimento.app.repository.DistributionRepository;
 import com.investimento.app.repository.DistributionRepositoryImpl;
 import com.investimento.app.repository.IndicatorHistoryRepository;
 import com.investimento.app.repository.QuoteHistoryRepository;
+import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.repository.QuoteHistoryRepositoryImpl;
 import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.repository.TransactionRepository;
 import com.investimento.app.repository.TransactionRepositoryImpl;
 import com.investimento.app.service.MarketService;
+import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.service.PositionService;
 import com.investimento.app.service.PositionServiceImpl;
 import javafx.application.Platform;
@@ -98,7 +100,7 @@ public final class StocksFiisViewManualTest {
             System.out.println("FALHOU: " + failure.get().getMessage());
             System.exit(1);
         } else {
-            System.out.println("TODOS OS CENARIOS PASSARAM (ATV-14)");
+            System.out.println("TODOS OS CENARIOS PASSARAM (ATV-14 + pendencia 2)");
         }
     }
 
@@ -195,6 +197,7 @@ public final class StocksFiisViewManualTest {
         scenario3_selectAssetUpdatesChart(view, root, petr4, mxrf11);
         scenario4_registerDistributionAppearsImmediately(root, petr4, distributionRepository);
         scenario5_deleteDistribution(view, distributionRepository, petr4);
+        scenario6_primaryCurrencyConvertsTheTable(view, root, marketService);
 
         System.out.println("[INFO] ativos de apoio no teste: PETR4=" + petr4.getId() + " MXRF11=" + mxrf11.getId()
                 + " VALE3(zerado)=" + vale3.getId() + " CDB(fora)=" + cdb.getId() + " BTC(fora)=" + btc.getId());
@@ -344,6 +347,82 @@ public final class StocksFiisViewManualTest {
         throw new AssertionError("Nao encontrei linha para ticker " + ticker);
     }
 
+    // =====================================================================
+    // Cenario 6 — moeda principal (pendencia 2): a tabela renderiza os
+    // valores convertidos, e o cabecalho troca de simbolo junto
+    // =====================================================================
+
+    /**
+     * Prova o caminho completo da conversao — de {@code settings} ate a
+     * celula renderizada — e nao so a classe {@link CurrencyDisplay}
+     * isoladamente (isso o {@code CurrencyDisplayManualTest} ja cobre).
+     *
+     * <p>Os valores esperados sao os do cenario 2 divididos por 5,30 (a taxa
+     * USD do {@code FakeMarketService} deste teste), calculados a mao aqui.
+     * O cenario termina voltando para BRL e reconferindo os valores
+     * originais — sem isso o estado estatico de {@link CurrencyDisplay}
+     * vazaria para qualquer cenario adicionado depois.</p>
+     */
+    private static void scenario6_primaryCurrencyConvertsTheTable(StocksFiisView view, Parent root,
+                                                                  MarketService marketService) throws Exception {
+        System.out.println();
+        System.out.println("== Cenario 6: moeda principal converte a tabela renderizada ==");
+
+        SettingRepository settings = new InMemorySettings();
+        settings.save(SettingsView.SETTING_PRIMARY_CURRENCY, "Dólar norte-americano (USD)");
+
+        try {
+            CurrencyDisplay.configure(settings, marketService);
+            assertEquals("US$", CurrencyDisplay.symbol(), "moeda principal deveria ter virado USD");
+            runOnFxAndWait(view::onShow);
+
+            GridPane grid = (GridPane) findNode(root, "#positionsGrid");
+            int petr4Row = findRowByTicker(grid, "PETR4");
+            int mxrfRow = findRowByTicker(grid, "MXRF11");
+
+            // PETR4: 4.000,00 / 5,30 = 754,7169... e 995,00 / 5,30 = 187,7358...
+            assertEquals("7,55", cellText(grid, 4, petr4Row), "PETR4 preco atual em USD (40,00 / 5,30)");
+            assertEquals("+187,74", cellText(grid, 6, petr4Row), "PETR4 ganho em USD (995,00 / 5,30)");
+            assertEquals("754,72", cellText(grid, 7, petr4Row), "PETR4 valor atual em USD (4.000,00 / 5,30)");
+            // MXRF11: 31.500,00 / 5,30 = 5.943,396... e 1.830,00 / 5,30 = 345,283...
+            assertEquals("+345,28", cellText(grid, 6, mxrfRow), "MXRF11 ganho em USD (1.830,00 / 5,30)");
+            assertEquals("5.943,40", cellText(grid, 7, mxrfRow), "MXRF11 valor atual em USD (31.500,00 / 5,30)");
+
+            // Quantidade NAO e valor monetario — nao pode ser convertida.
+            assertEquals("100", cellText(grid, 2, petr4Row), "quantidade continua 100 (nao e dinheiro)");
+            assertEquals("+33,11%", cellText(grid, 5, petr4Row), "ganho % continua o mesmo (nao e dinheiro)");
+
+            // Cabecalho da coluna de ganho acompanha o simbolo.
+            assertEquals("GANHO US$", cellText(grid, 6, 0), "cabecalho da coluna de ganho deveria mostrar US$");
+        } finally {
+            // Volta ao padrao mesmo se uma assercao falhar no meio.
+            settings.save(SettingsView.SETTING_PRIMARY_CURRENCY, "Real (BRL)");
+            CurrencyDisplay.configure(settings, marketService);
+            runOnFxAndWait(view::onShow);
+        }
+
+        GridPane grid = (GridPane) findNode(root, "#positionsGrid");
+        int petr4Row = findRowByTicker(grid, "PETR4");
+        assertEquals("4.000,00", cellText(grid, 7, petr4Row), "voltar para BRL restaura o valor original");
+        assertEquals("GANHO R$", cellText(grid, 6, 0), "voltar para BRL restaura o cabecalho");
+        System.out.println("[ok] conversao de exibicao aplicada e revertida sem residuo");
+    }
+
+    /** {@link SettingRepository} em memoria — este teste nao persiste preferencia nenhuma. */
+    private static final class InMemorySettings implements SettingRepository {
+        private final Map<String, String> values = new java.util.HashMap<>();
+
+        @Override
+        public String get(String key, String defaultValue) {
+            return values.getOrDefault(key, defaultValue);
+        }
+
+        @Override
+        public void save(String key, String value) {
+            values.put(key, value);
+        }
+    }
+
     /** Extrai o texto de uma celula do GridPane por coluna/linha — cobre tanto {@link Label} direto quanto o {@link VBox} de 2 linhas (coluna TICKER/ATIVO). */
     private static String cellText(GridPane grid, int col, int row) {
         for (Node child : grid.getChildrenUnmodifiable()) {
@@ -468,6 +547,17 @@ public final class StocksFiisViewManualTest {
             return Map.of();
         }
 
+        // Fake sem cache nem rede: a versao cacheada e a mesma resposta fixa.
+        @Override
+        public MacroSnapshot getCachedMacroSnapshot() {
+            return getMacroSnapshot();
+        }
+
+        @Override
+        public Map<String, List<IndicatorPoint>> getCachedIndicators() {
+            return getIndicators();
+        }
+
         @Override
         public Task<Void> updateQuotes(List<Asset> assets) {
             return new Task<>() {
@@ -491,6 +581,16 @@ public final class StocksFiisViewManualTest {
         @Override
         public Map<Long, Double> getDailyChanges(List<Asset> assets) {
             return Map.of();
+        }
+
+        @Override
+        public java.util.Optional<String> getLastFailure() {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public List<com.investimento.app.dto.SyncEvent> getRecentSyncs() {
+            return List.of();
         }
     }
 }

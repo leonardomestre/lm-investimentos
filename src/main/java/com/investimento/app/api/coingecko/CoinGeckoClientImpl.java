@@ -13,6 +13,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -52,13 +53,22 @@ public class CoinGeckoClientImpl implements CoinGeckoClient {
 
     private static final int MAX_HISTORY_DAYS = 365;
 
+    /**
+     * Sem timeout, uma conexao aceita mas nunca respondida trava a thread
+     * chamadora indefinidamente. Ver a mesma nota em {@code HgBrasilClientImpl}.
+     */
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
+
     private final HttpClient httpClient;
 
     /** Contador simples de requisições HTTP feitas — usado nos testes desta atividade. */
     private int requestCount = 0;
 
     public CoinGeckoClientImpl() {
-        this.httpClient = HttpClient.newHttpClient();
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(CONNECT_TIMEOUT)
+                .build();
     }
 
     public int getRequestCount() {
@@ -166,12 +176,19 @@ public class CoinGeckoClientImpl implements CoinGeckoClient {
         }
 
         List<HistoricalPoint> history = new ArrayList<>();
-        for (int i = 0; i < prices.length(); i++) {
-            JSONArray point = prices.getJSONArray(i);
-            // Timestamp em MILISSEGUNDOS aqui — diferente de /simple/price
-            // (last_updated_at em segundos, ver getPrices).
-            LocalDate date = Instant.ofEpochMilli(point.getLong(0)).atZone(ZoneOffset.UTC).toLocalDate();
-            history.add(new HistoricalPoint(date, point.getDouble(1)));
+        try {
+            for (int i = 0; i < prices.length(); i++) {
+                JSONArray point = prices.getJSONArray(i);
+                // Timestamp em MILISSEGUNDOS aqui — diferente de /simple/price
+                // (last_updated_at em segundos, ver getPrices).
+                LocalDate date = Instant.ofEpochMilli(point.getLong(0)).atZone(ZoneOffset.UTC).toLocalDate();
+                history.add(new HistoricalPoint(date, point.getDouble(1)));
+            }
+        } catch (JSONException e) {
+            // Convertida para a excecao de dominio — e so ela que
+            // MarketService.seedInitialHistory captura.
+            throw new CoinGeckoException(
+                    "Formato inesperado no historico de " + upper + ": " + e.getMessage(), e);
         }
         return history;
     }
@@ -224,6 +241,7 @@ public class CoinGeckoClientImpl implements CoinGeckoClient {
 
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .header("User-Agent", "investimento/coingecko-client")
+                .timeout(REQUEST_TIMEOUT)
                 .GET()
                 .build();
         try {

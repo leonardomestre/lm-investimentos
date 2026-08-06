@@ -14,8 +14,12 @@ import com.investimento.app.dto.Position;
 import com.investimento.app.repository.AssetRepository;
 import com.investimento.app.repository.PortfolioSnapshotRepository;
 import com.investimento.app.repository.RateHistoryRepository;
+import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.CurrencyDisplay;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
 import com.investimento.app.ui.Screen;
 import javafx.beans.binding.Bindings;
 import javafx.concurrent.Task;
@@ -67,18 +71,15 @@ import java.util.function.Consumer;
  */
 public class DashboardView implements ScreenView {
 
-    // Cores duplicadas de theme.css/paleta.md — necessario porque Canvas
-    // desenha imperativamente e nao consegue ler variavel -fx-color-* do CSS.
-    private static final Color COLOR_STOCKS = Color.web("#2f6f5e");
-    private static final Color COLOR_FIIS = Color.web("#5cae92");
-    private static final Color COLOR_FIXED_INCOME = Color.web("#14181a");
-    private static final Color COLOR_CRYPTO = Color.web("#c9a227");
-    private static final Color COLOR_FOREX = Color.web("#b3402f");
-    private static final Color COLOR_CHART_GRID = Color.web("#eeebe5");
-    private static final Color COLOR_CHART_AXIS_TEXT = Color.web("#a2a8ab");
-    private static final Color COLOR_CHART_LINE_PRIMARY = Color.web("#2f6f5e");
-    private static final Color COLOR_CHART_LINE_SECONDARY = Color.web("#c3bfb6");
-    private static final Color COLOR_CHART_AREA = Color.web("#3d9c78", 0.1);
+    /**
+     * Cores de grafico do tema ativo. Antes eram constantes {@code Color.web}
+     * fixas aqui — viraram consulta ao {@link ThemeManager} para o tema
+     * escuro poder trocá-las. Lida no momento do desenho (nao guardada em
+     * campo), entao o proximo {@code refresh()} ja pinta com o tema novo.
+     */
+    private static Theme theme() {
+        return ThemeManager.current();
+    }
 
     private static final Locale PT_BR = new Locale("pt", "BR");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -90,27 +91,46 @@ public class DashboardView implements ScreenView {
     private final AssetRepository assetRepository;
     private final PortfolioSnapshotRepository portfolioSnapshotRepository;
     private final RateHistoryRepository rateHistoryRepository;
+    private final SettingRepository settingRepository;
     private final Consumer<Screen> onNavigate;
 
     private final VBox root;
     private final VBox contentBody;
     private final Label subtitleLabel;
+    private final Label failureBanner = new Label();
+
+    // "Ocultar valores no dashboard" (Configurações > Preferências) —
+    // recarregado a cada refresh(), afeta só os helpers formatCurrency/
+    // formatSignedCurrency/formatSignedCurrencyNoDecimals/formatCompactCurrency/
+    // formatSignedNumber (valores monetários), nunca percentuais/quantidades.
+    private boolean hideValues;
 
     public DashboardView(MarketService marketService,
                           PositionService positionService,
                           AssetRepository assetRepository,
                           PortfolioSnapshotRepository portfolioSnapshotRepository,
                           RateHistoryRepository rateHistoryRepository,
+                          SettingRepository settingRepository,
                           Consumer<Screen> onNavigate) {
         this.marketService = marketService;
         this.positionService = positionService;
         this.assetRepository = assetRepository;
         this.portfolioSnapshotRepository = portfolioSnapshotRepository;
         this.rateHistoryRepository = rateHistoryRepository;
+        this.settingRepository = settingRepository;
         this.onNavigate = onNavigate;
 
         subtitleLabel = new Label("Cadastre ativos e clique em \"Atualizar cotações agora\".");
         subtitleLabel.getStyleClass().add("header-subtitle");
+
+        failureBanner.setId("failureBanner");
+        failureBanner.setStyle("-fx-background-color: -fx-color-loss-bg; -fx-background-radius: 10;"
+                + " -fx-padding: 11 13; -fx-font-family: 'Manrope SemiBold'; -fx-font-size: 12px;"
+                + " -fx-text-fill: -fx-color-loss;");
+        failureBanner.setWrapText(true);
+        failureBanner.setMaxWidth(Double.MAX_VALUE);
+        failureBanner.setVisible(false);
+        failureBanner.setManaged(false);
 
         HBox header = buildHeader();
 
@@ -201,25 +221,90 @@ public class DashboardView implements ScreenView {
     // =====================================================================
 
     private void refresh() {
+        hideValues = settingRepository != null
+                && Boolean.parseBoolean(settingRepository.get(SettingsView.SETTING_HIDE_DASHBOARD_VALUES, "false"));
+
         List<Asset> assets = assetRepository.listAssets(false);
-        PortfolioSummary summary = positionService.calculatePortfolioSummary();
         List<Position> positions = positionService.calculateAllPositions(false);
+        PortfolioSummary summary = positionService.calculatePortfolioSummary(positions);
 
         ensureTodaySnapshot(summary);
 
-        MacroSnapshot macroSnapshot = marketService.getMacroSnapshot();
-        Map<String, List<IndicatorPoint>> indicators = marketService.getIndicators();
+        // Cache puro, sem rede: este metodo roda na FX thread. A busca de fato
+        // acontece em refreshMacroPanelAsync(), no fim deste metodo.
+        MacroSnapshot macroSnapshot = marketService.getCachedMacroSnapshot();
+        Map<String, List<IndicatorPoint>> indicators = marketService.getCachedIndicators();
         Map<Long, Double> dailyChanges = marketService.getDailyChanges(assets);
         List<PortfolioSnapshot> snapshots = portfolioSnapshotRepository.listAll();
 
         subtitleLabel.setText("Última atualização de cotações às " + LocalTime.now().format(TIME_FMT) + " · hoje");
+        refreshFailureBanner();
 
-        contentBody.getChildren().setAll(
+        contentBody.getChildren().setAll(failureBanner,
                 buildKpiRow(macroSnapshot, indicators),
                 buildSummaryAndChartRow(summary, snapshots),
                 buildDiversificationAndGainLossRow(positions),
                 buildTablesRow(positions, dailyChanges)
         );
+
+        refreshMacroPanelAsync();
+    }
+
+    /**
+     * Renova o painel macro (moedas/índices/IPCA/SELIC) fora da FX thread e
+     * redesenha só a linha de KPIs quando a resposta chega.
+     *
+     * <p>Antes, {@code refresh()} chamava {@code getMacroSnapshot()}/{@code
+     * getIndicators()} direto: com o cache vencido (TTL de 5 min / 6 h), abrir
+     * ou voltar para o Dashboard disparava uma requisição HTTP síncrona na
+     * thread da interface e a janela ficava congelada até a resposta — ou até o
+     * timeout do cliente, se a rede não respondesse.</p>
+     *
+     * <p>Os dois métodos já tratam falha internamente devolvendo o último valor
+     * conhecido, então não há {@code setOnFailed}: se a busca não deu certo, o
+     * painel simplesmente continua mostrando o que já estava desenhado, e o
+     * banner de falha (quando ligado nas Configurações) explica o motivo.</p>
+     */
+    private void refreshMacroPanelAsync() {
+        Task<Void> task = new Task<>() {
+            @Override
+            protected Void call() {
+                marketService.getMacroSnapshot();
+                marketService.getIndicators();
+                return null;
+            }
+        };
+        task.setOnSucceeded(ev -> {
+            if (contentBody.getChildren().size() > 1) {
+                contentBody.getChildren().set(1, buildKpiRow(
+                        marketService.getCachedMacroSnapshot(),
+                        marketService.getCachedIndicators()));
+            }
+            refreshFailureBanner();
+        });
+        Thread thread = new Thread(task, "macro-panel-dashboard");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * "Avisar quando a API falhar" (Configurações > Atualização de
+     * cotações) — só mostra o banner se o toggle estiver ligado E houver uma
+     * falha registrada por {@link MarketService#getLastFailure()} desde a
+     * última busca bem-sucedida da mesma operação.
+     */
+    private void refreshFailureBanner() {
+        boolean alertEnabled = settingRepository != null
+                && Boolean.parseBoolean(settingRepository.get(SettingsView.SETTING_ALERT_ON_FAILURE, "false"));
+        var failure = alertEnabled ? marketService.getLastFailure() : java.util.Optional.<String>empty();
+        if (failure.isPresent()) {
+            failureBanner.setText("Falha ao buscar cotações — mostrando a última cotação válida conhecida. (" + failure.get() + ")");
+            failureBanner.setVisible(true);
+            failureBanner.setManaged(true);
+        } else {
+            failureBanner.setVisible(false);
+            failureBanner.setManaged(false);
+        }
     }
 
     /**
@@ -229,8 +314,17 @@ public class DashboardView implements ScreenView {
      * {@code PortfolioSnapshotRepository} não tem {@code upsert} (nota da
      * ATV-02/CLAUDE.md) — checa {@code findByDate} antes para decidir entre
      * {@code insert}/{@code update} e evitar {@code UNIQUE constraint failed}.
+     *
+     * <p>Gate "Snapshot diário do patrimônio" (Configurações > Atualização de
+     * cotações): quando desligado, pula a gravação — o gráfico "Evolução do
+     * patrimônio" simplesmente para de ganhar pontos novos enquanto o toggle
+     * estiver desligado.</p>
      */
     private void ensureTodaySnapshot(PortfolioSummary summary) {
+        if (settingRepository != null
+                && !Boolean.parseBoolean(settingRepository.get(SettingsView.SETTING_SNAPSHOT_ENABLED, "true"))) {
+            return;
+        }
         LocalDate today = LocalDate.now();
         PortfolioSnapshot snapshot = PortfolioSnapshot.builder()
                 .date(today)
@@ -487,8 +581,8 @@ public class DashboardView implements ScreenView {
     }
 
     private HBox buildLineChartLegend() {
-        return new HBox(18, legendItem("Patrimônio", COLOR_CHART_LINE_PRIMARY),
-                legendItem("CDI acumulado", COLOR_CHART_LINE_SECONDARY));
+        return new HBox(18, legendItem("Patrimônio", theme().chartLinePrimary()),
+                legendItem("CDI acumulado", theme().chartLineSecondary()));
     }
 
     private HBox legendItem(String text, Color color) {
@@ -561,10 +655,10 @@ public class DashboardView implements ScreenView {
         }
 
         // 1. grade horizontal + 2. labels eixo Y
-        gc.setStroke(COLOR_CHART_GRID);
+        gc.setStroke(theme().chartGrid());
         gc.setLineWidth(1);
         gc.setFont(Font.font("IBM Plex Mono", 10));
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int gridLines = 5;
         for (int i = 0; i < gridLines; i++) {
             double y = topPad + plotHeight * i / (double) (gridLines - 1);
@@ -582,27 +676,27 @@ public class DashboardView implements ScreenView {
         areaY[n] = topPad + plotHeight;
         areaX[n + 1] = xs[0];
         areaY[n + 1] = topPad + plotHeight;
-        gc.setFill(COLOR_CHART_AREA);
+        gc.setFill(theme().chartArea());
         gc.fillPolygon(areaX, areaY, n + 2);
 
         // 5. linha secundaria (CDI acumulado, tracejada)
-        gc.setStroke(COLOR_CHART_LINE_SECONDARY);
+        gc.setStroke(theme().chartLineSecondary());
         gc.setLineWidth(2);
         gc.setLineDashes(5, 5);
         gc.strokePolyline(xs, ysCdi, n);
         gc.setLineDashes((double[]) null);
 
         // 4. linha principal
-        gc.setStroke(COLOR_CHART_LINE_PRIMARY);
+        gc.setStroke(theme().chartLinePrimary());
         gc.setLineWidth(2.5);
         gc.strokePolyline(xs, ysMain, n);
 
         // 6. ponto final destacado
-        gc.setFill(COLOR_CHART_LINE_PRIMARY);
+        gc.setFill(theme().chartLinePrimary());
         gc.fillOval(xs[n - 1] - 4.5, ysMain[n - 1] - 4.5, 9, 9);
 
         // 7. labels eixo X (inicio, ~1/4, meio, ~3/4, fim)
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int[] labelIdx = n <= 5
                 ? intRange(n)
                 : new int[]{0, n / 4, n / 2, (3 * n) / 4, n - 1};
@@ -735,7 +829,7 @@ public class DashboardView implements ScreenView {
     private VBox buildGainLossCard(List<Position> positions) {
         Label title = new Label("Ganho / perda por categoria");
         title.getStyleClass().add("content-card-title");
-        Label subtitle = new Label("resultado em R$ acumulado por categoria");
+        Label subtitle = new Label("resultado em " + CurrencyDisplay.symbol() + " acumulado por categoria");
         subtitle.getStyleClass().add("content-card-subtitle");
         VBox titleBox = new VBox(4, title, subtitle);
 
@@ -885,7 +979,8 @@ public class DashboardView implements ScreenView {
 
             Label ticker = tableCellPrimary(assetLabel(position.asset()), last);
             Label categ = tableCellSecondary(categoryLabelShort(position.asset().category()), last);
-            Label value = tableCellNumericNeutral(formatDecimal(position.currentValue(), 2), last);
+            Label value = tableCellNumericNeutral(
+                    hideValues ? MASKED_VALUE : formatMoney(position.currentValue(), 2), last);
             Label result = tableCellResult(position.gainLossPercent(), last);
 
             for (Label cell : List.of(ticker, categ, value, result)) {
@@ -1021,7 +1116,10 @@ public class DashboardView implements ScreenView {
         row.setOnMouseClicked(e -> onNavigate.accept(categoryScreen(position.asset().category())));
 
         Label arrow = new Label(gain ? "↑" : "↓");
-        arrow.setStyle("-fx-text-fill: white; -fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 11px;");
+        // Classe de CSS em vez de -fx-text-fill:white inline: no tema escuro
+        // o fundo gain/loss do badge e claro, e a seta precisa inverter junto
+        // (token -fx-color-on-gain/-on-loss).
+        arrow.getStyleClass().add("highlight-badge-glyph");
         StackPane badge = new StackPane(arrow);
         badge.getStyleClass().add(gain ? "highlight-badge-gain" : "highlight-badge-loss");
 
@@ -1116,11 +1214,11 @@ public class DashboardView implements ScreenView {
 
     private static Color categoryColor(Category category) {
         return switch (category) {
-            case STOCKS -> COLOR_STOCKS;
-            case FIIS -> COLOR_FIIS;
-            case FIXED_INCOME -> COLOR_FIXED_INCOME;
-            case CRYPTO -> COLOR_CRYPTO;
-            case FOREX -> COLOR_FOREX;
+            case STOCKS -> theme().categoryStocks();
+            case FIIS -> theme().categoryFiis();
+            case FIXED_INCOME -> theme().categoryFixedIncome();
+            case CRYPTO -> theme().categoryCrypto();
+            case FOREX -> theme().categoryForex();
         };
     }
 
@@ -1155,23 +1253,50 @@ public class DashboardView implements ScreenView {
         return nf.format(value);
     }
 
-    private static String formatCurrency(double value) {
-        return "R$ " + formatDecimal(value, 2);
+    // Placeholder de "ocultar valores no dashboard" - substitui o numero
+    // formatado mas preserva sinal/prefixo, pra nao quebrar o layout
+    // (largura de coluna, alinhamento a direita etc.).
+    private static final String MASKED_VALUE = "••••••";
+
+    /**
+     * Valor monetário sem símbolo, já convertido para a moeda principal
+     * (Configurações &gt; Preferências). Todo valor que o app calcula é BRL —
+     * a conversão acontece só aqui, na formatação. Ver {@link CurrencyDisplay}.
+     */
+    private static String formatMoney(double brlValue, int fractionDigits) {
+        return formatDecimal(CurrencyDisplay.convert(brlValue), fractionDigits);
     }
 
-    private static String formatSignedCurrency(double value) {
+    private String formatCurrency(double value) {
+        if (hideValues) {
+            return CurrencyDisplay.symbol() + " " + MASKED_VALUE;
+        }
+        return CurrencyDisplay.symbol() + " " + formatMoney(value, 2);
+    }
+
+    private String formatSignedCurrency(double value) {
         String sign = value < 0 ? "− " : "+ ";
-        return sign + "R$ " + formatDecimal(Math.abs(value), 2);
+        if (hideValues) {
+            return sign + CurrencyDisplay.symbol() + " " + MASKED_VALUE;
+        }
+        return sign + CurrencyDisplay.symbol() + " " + formatMoney(Math.abs(value), 2);
     }
 
-    private static String formatSignedCurrencyNoDecimals(double value) {
+    private String formatSignedCurrencyNoDecimals(double value) {
         String sign = value < 0 ? "− " : "+ ";
-        return sign + "R$ " + formatDecimal(Math.abs(value), 0);
+        if (hideValues) {
+            return sign + CurrencyDisplay.symbol() + " " + MASKED_VALUE;
+        }
+        return sign + CurrencyDisplay.symbol() + " " + formatMoney(Math.abs(value), 0);
     }
 
-    private static String formatSignedNumber(double value) {
+    /** Usado só para valores monetários (ex.: ganho/perda por categoria) — respeita "ocultar valores". */
+    private String formatSignedNumber(double value) {
         String sign = value < 0 ? "−" : "+";
-        return sign + formatDecimal(Math.abs(value), 0);
+        if (hideValues) {
+            return sign + MASKED_VALUE;
+        }
+        return sign + formatMoney(Math.abs(value), 0);
     }
 
     private static String formatSignedPercent(double value) {
@@ -1184,16 +1309,25 @@ public class DashboardView implements ScreenView {
         return sign + formatDecimal(Math.abs(value), 2) + " p.p.";
     }
 
-    private static String formatCompact(double value) {
-        if (Math.abs(value) >= 1000) {
-            return formatDecimal(value / 1000.0, 0) + "k";
+    /** Usado nos labels do eixo Y do gráfico de patrimônio — respeita "ocultar valores". */
+    private String formatCompact(double value) {
+        if (hideValues) {
+            return MASKED_VALUE;
         }
-        return formatDecimal(value, 0);
+        double converted = CurrencyDisplay.convert(value);
+        if (Math.abs(converted) >= 1000) {
+            return formatDecimal(converted / 1000.0, 0) + "k";
+        }
+        return formatDecimal(converted, 0);
     }
 
-    private static String formatCompactCurrency(double value) {
-        if (Math.abs(value) >= 1000) {
-            return "R$ " + formatDecimal(value / 1000.0, 1) + "k";
+    private String formatCompactCurrency(double value) {
+        if (hideValues) {
+            return CurrencyDisplay.symbol() + " " + MASKED_VALUE;
+        }
+        double converted = CurrencyDisplay.convert(value);
+        if (Math.abs(converted) >= 1000) {
+            return CurrencyDisplay.symbol() + " " + formatDecimal(converted / 1000.0, 1) + "k";
         }
         return formatCurrency(value);
     }

@@ -61,6 +61,11 @@ public final class Database {
             try (Statement st = conn.createStatement()) {
                 st.execute("PRAGMA foreign_keys = ON;");
                 st.execute("PRAGMA journal_mode = WAL;");
+                // A UI e as Task de background (atualizacao de cotacoes, seed
+                // de historico) usam esta mesma conexao. Sem busy_timeout, um
+                // lock disputado falha na hora com SQLITE_BUSY e derruba a
+                // operacao; com ele, o SQLite espera ate 5s antes de desistir.
+                st.execute("PRAGMA busy_timeout = 5000;");
             }
             bootstrapSchema(conn);
             return conn;

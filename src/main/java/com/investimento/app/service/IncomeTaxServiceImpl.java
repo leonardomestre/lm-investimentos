@@ -17,14 +17,27 @@ import java.util.stream.Collectors;
  * Implementação de {@link IncomeTaxService} — a regra de isenção por
  * categoria é um GATILHO BINÁRIO por mês (não uma faixa progressiva de
  * dedução): ultrapassou o teto de venda do mês, todo o {@code grossGain}
- * daquele mês vira tributável a 15%; não ultrapassou, o mês inteiro fica
+ * daquele mês vira tributável; não ultrapassou, o mês inteiro fica
  * isento (Instrução Normativa RFB nº 1.585/2015, art. 56 — ver ATV-11).
+ *
+ * <p>A alíquota é 15% em ações e cripto e 20% em FII (art. 62 da mesma
+ * instrução normativa).</p>
  */
 public class IncomeTaxServiceImpl implements IncomeTaxService {
 
     private static final double STOCKS_MONTHLY_EXEMPTION_THRESHOLD = 20_000;
     private static final double CRYPTO_MONTHLY_EXEMPTION_THRESHOLD = 35_000;
     private static final double CAPITAL_GAIN_TAX_RATE = 0.15;
+
+    /**
+     * Ganho de capital na alienação de cota de FII é tributado a <b>20%</b>,
+     * não aos 15% das demais categorias (IN RFB nº 1.585/2015, art. 62).
+     *
+     * <p>O planejamento e a ATV-11 diziam 15% para FII; era um erro da
+     * especificação, não uma simplificação deliberada — os três documentos
+     * foram corrigidos junto com esta constante.</p>
+     */
+    private static final double FII_CAPITAL_GAIN_TAX_RATE = 0.20;
 
     private final AssetRepository assetRepository;
     private final PositionService positionService;
@@ -116,7 +129,8 @@ public class IncomeTaxServiceImpl implements IncomeTaxService {
         }
 
         // Prejuizo (grossGain < 0) nunca gera imposto negativo, mesmo em mes tributavel.
-        double taxDue = (taxable && grossGain > 0) ? grossGain * CAPITAL_GAIN_TAX_RATE : 0;
+        double rate = category == Category.FIIS ? FII_CAPITAL_GAIN_TAX_RATE : CAPITAL_GAIN_TAX_RATE;
+        double taxDue = (taxable && grossGain > 0) ? grossGain * rate : 0;
 
         return new MonthlyTaxAssessment(category, month, totalSold, grossGain, !taxable, taxDue);
     }

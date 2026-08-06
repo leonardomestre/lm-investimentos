@@ -1,0 +1,165 @@
+/*
+ * Tema escuro — camada aplicada POR CIMA do /theme.css.
+ *
+ * Como funciona (ver ui/ThemeManager.java): a Scene sempre carrega
+ * /theme.css; quando o tema escuro esta ativo, /theme-dark.css e adicionado
+ * DEPOIS na mesma lista de stylesheets. Como as regras aqui tem a mesma
+ * especificidade das do theme.css (`.root`), o stylesheet mais recente vence
+ * o desempate do cascade e substitui os tokens -fx-color-*. Nenhuma regra de
+ * componente precisa ser duplicada: theme.css pinta tudo via token.
+ *
+ * Consequencia: trocar de tema em tempo de execucao e so adicionar/remover
+ * este arquivo de scene.getStylesheets() — nao ha reconstrucao de tela.
+ *
+ * A paleta abaixo esta documentada em
+ * .claude/skills/design-system/references/paleta.md, secao "Tema escuro" —
+ * cada token claro tem aqui exatamente um par escuro, na mesma ordem.
+ */
+
+.root {
+    /* ---------- Superficies ---------- */
+    -fx-color-bg-page:        #0e1113;
+    -fx-color-bg-shell:       #14181a;
+    -fx-color-bg-surface:     #1b2124;
+    -fx-color-bg-surface-tint:#222a2d;
+    -fx-color-bg-muted:       #252c30;
+    -fx-color-border-card:    #2a3236;
+    -fx-color-border-row:     #242b2f;
+    -fx-color-border-pill:    #343d42;
+    -fx-color-border-dashed:  #3a4348;
+    -fx-color-bg-empty:       #191f22;
+
+    /* ---------- Texto sobre superficie escura ---------- */
+    -fx-color-text-primary:   #f2f4f4;
+    -fx-color-text-secondary: #c6cccf;
+    -fx-color-text-muted:     #98a1a6;
+    -fx-color-text-faint:     #828b90;
+    -fx-color-text-eyebrow:   #9aa3a8;
+    /* Apesar do nome, o unico uso deste token no theme.css e o TEXTO DIGITADO
+       de um campo de formulario (.text-field e o editor do .date-picker) — no
+       template o campo preenchido tem enfase baixa. Manter o equivalente
+       literal do claro (#a9aeb1 escurecido) deixaria o valor que o usuario
+       digitou menos legivel que o proprio placeholder, invertendo a
+       hierarquia. Aqui ele fica claro o suficiente para ser lido, e ainda um
+       degrau abaixo de text-primary. */
+    -fx-color-text-disabled:  #dde2e4;
+    /* Placeholder bem claro, quase branco — o oposto do que o padrao do
+       Modena produziria aqui (o proprio fundo escuro, 30% mais escuro ainda,
+       ou seja quase preto). Nao e #ffffff de proposito: o valor digitado e
+       text-primary (#f2f4f4), e um placeholder identico ao texto real
+       deixaria de parecer placeholder. */
+    -fx-color-text-placeholder: #b6bfc4;
+
+    /* ---------- Sidebar ----------
+       A sidebar ja era escura no tema claro (area de tema escuro fixo do
+       template). No escuro ela quase nao muda — so o fundo desce um degrau
+       para continuar se distinguindo do card de conteudo, que agora tambem
+       e escuro. */
+    -fx-color-sidebar-bg:              #12171a;
+    -fx-color-sidebar-text:            #9aa2a7;
+    -fx-color-sidebar-text-active:     #ffffff;
+    -fx-color-sidebar-item-active-bg:  #232b2f;
+    -fx-color-sidebar-dot-inactive:    #3a4247;
+    -fx-color-sidebar-card-bg:         #1b2225;
+    -fx-color-sidebar-divider:         #2a3134;
+    -fx-color-sidebar-label-muted:     #7d868b;
+
+    /* ---------- Marca ----------
+       Cada verde sobe um degrau de luminosidade: o accent do claro (#3d9c78)
+       vira o accent-strong do escuro, e assim por diante. Mantem a mesma
+       hierarquia (accent = ativo/foco, accent-strong = preenchimento) com
+       contraste suficiente sobre #1b2124. */
+    -fx-color-accent:            #4fb890;
+    -fx-color-accent-strong:     #3d9c78;
+    -fx-color-accent-hover:      #6fd0a9;
+    -fx-color-on-accent:         #0c1512;
+
+    /* ---------- Preenchimento invertido ----------
+       Inverte junto: no escuro, o botao primario e uma superficie clara com
+       texto quase-preto (mesmo papel visual de "elemento solido de maior
+       enfase" que o preto tinha no claro). */
+    -fx-color-fill-inverse:      #e9e7e2;
+    -fx-color-on-fill-inverse:   #14181a;
+
+    /* ---------- Status ---------- */
+    -fx-color-gain:              #5cc79b;
+    -fx-color-gain-bg:           #16261f;
+    -fx-color-gain-on-dark:      #5cc79b;
+    -fx-color-loss:              #e08a76;
+    -fx-color-loss-bg:           #2a1a17;
+    -fx-color-neutral-warn:      #d9b445;
+    -fx-color-neutral-warn-dark: #e0c46a;
+    -fx-color-neutral-warn-bg:   #2a2415;
+    /* gain/loss aqui sao tons CLAROS — texto por cima deles inverte para
+       quase-preto (no claro era branco). */
+    -fx-color-on-gain:           #0c1512;
+    -fx-color-on-loss:           #24100c;
+
+    /* ---------- Zona de perigo ----------
+       Ja era um conjunto escuro no tema claro; sobe um pouco o fundo para
+       nao sumir contra o novo bg-surface escuro. */
+    -fx-color-danger-dark-bg:     #2a1e1b;
+    -fx-color-danger-dark-border: #7d4539;
+    -fx-color-danger-dark-text:   #e8a08d;
+
+    /* ---------- Campo dentro de card escuro ---------- */
+    -fx-color-field-dark-border:  #333b3f;
+
+    /* ---------- Categorias de ativo ----------
+       As 5 cores de categoria sao identidade fixa (paleta.md) e mudam o
+       minimo possivel: so "Renda fixa" PRECISA mudar, porque no claro ela e
+       #14181a (quase preto) e ficaria invisivel sobre fundo escuro. As
+       demais so clareiam o suficiente para manter contraste no donut/nas
+       barras. */
+    -fx-color-category-acoes:       #3d9c78;
+    -fx-color-category-fiis:        #7fd4b3;
+    -fx-color-category-renda-fixa:  #c6cccf;
+    -fx-color-category-cripto:      #d9b445;
+    -fx-color-category-cambio:      #e08a76;
+
+    /* ---------- Graficos ---------- */
+    -fx-color-chart-grid:            #252d31;
+    -fx-color-chart-axis-text:       #7f888d;
+    -fx-color-chart-line-primary:    #4fb890;
+    -fx-color-chart-line-secondary:  #5c666b;
+
+    /* ---------- Tokens do Modena (skin padrao do JavaFX) ----------
+       O theme.css cobre os componentes que o app monta a mao, mas nao os que
+       o proprio JavaFX desenha por dentro: popup de ComboBox, ScrollBar,
+       ContextMenu, Tooltip, caret/selecao de TextField. Todos derivam destes
+       tokens do Modena — redefinir -fx-base aqui escurece esse conjunto
+       inteiro de uma vez, em vez de reescrever regra por regra.
+
+       Nao ha equivalente no theme.css porque no tema claro o padrao do
+       Modena ja combina com a paleta clara. */
+    -fx-base:                        #1b2124;
+    -fx-background:                  #14181a;
+    -fx-control-inner-background:    #1b2124;
+    -fx-control-inner-background-alt:#1f262a;
+    -fx-text-background-color:       #f2f4f4;
+    -fx-accent:                      #3d9c78;
+    -fx-default-button:              #2f6f5e;
+    -fx-focus-color:                 #4fb890;
+    -fx-faint-focus-color:           rgba(79,184,144,0.16);
+    -fx-selection-bar:               #2f6f5e;
+    -fx-selection-bar-non-focused:   #2a3236;
+    -fx-mark-color:                  #f2f4f4;
+    -fx-shadow-highlight-color:      transparent;
+    -fx-outer-border:                #343d42;
+    -fx-inner-border:                #2a3236;
+    -fx-body-color:                  #1b2124;
+}
+
+/* Sombras: a sombra do tema claro e um preto translucido calibrado para
+   cair sobre #e9e7e2. Sobre um fundo ja quase preto ela some — aumentar a
+   opacidade mantem a nocao de elevacao dos paineis flutuantes. */
+.autocomplete-panel,
+.date-picker-popup,
+.dropdown-shadow {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 18, 0, 0, 8);
+}
+.shell-shadow {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.6), 32, 0, 0, 14);
+    -fx-border-color: rgba(255,255,255,0.06);
+    -fx-border-width: 1;
+}

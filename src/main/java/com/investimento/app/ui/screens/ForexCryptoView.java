@@ -8,8 +8,12 @@ import com.investimento.app.dto.PortfolioSummary;
 import com.investimento.app.dto.Position;
 import com.investimento.app.repository.AssetRepository;
 import com.investimento.app.repository.QuoteHistoryRepository;
+import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.CurrencyDisplay;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
 import javafx.beans.binding.Bindings;
 import javafx.concurrent.Task;
 import javafx.geometry.HPos;
@@ -59,17 +63,28 @@ import java.util.Map;
  */
 public class ForexCryptoView implements ScreenView {
 
-    // Cores duplicadas de theme.css/paleta.md — Canvas desenha imperativamente
-    // e não lê variável -fx-color-* do CSS (mesma nota das ATV-12/14/15).
-    private static final Color COLOR_CHART_GRID = Color.web("#eeebe5");
-    private static final Color COLOR_CHART_AXIS_TEXT = Color.web("#a2a8ab");
-    private static final Color COLOR_CHART_LINE_PRIMARY = Color.web("#2f6f5e");
-    private static final Color COLOR_CHART_AREA = Color.web("#3d9c78", 0.1);
-    private static final Color COLOR_AVG_PRICE_LINE = Color.web("#c9a227");
-    // Tokens fixos de categoria (theme.css .root) — usados na barra
-    // proporcional cripto/câmbio do card de resumo escuro.
-    private static final Color COLOR_CATEGORY_CRIPTO = Color.web("#c9a227");
-    private static final Color COLOR_CATEGORY_CAMBIO = Color.web("#b3402f");
+    /**
+     * Cores de grafico do tema ativo (ver {@link ThemeManager}). Notas desta
+     * tela, que nao seguem o padrao das telas 03/04:
+     * <ul>
+     *   <li>linha de cambio em {@code accentStrong} (o template nao tem
+     *       exemplo de cambio — usa a cor padrao das demais telas) e linha de
+     *       cripto em {@code neutralWarn} (cor da linha "Cotacao (CoinGecko)"
+     *       no template, tela 05);</li>
+     *   <li>a linha de referencia "preco medio de compra" e cinza neutro
+     *       ({@code textFaint}), nao ambar como nas telas 03/04, e o grafico
+     *       aqui <b>nao</b> tem area preenchida sob a linha principal (ver
+     *       Telas.dc.html linhas 861-869);</li>
+     *   <li>a barra proporcional cripto/cambio do card escuro usa
+     *       {@code accent} puro para cambio, nao a cor fixa de categoria
+     *       ({@code categoryForex}) — o template (linha 895) mostra esse
+     *       segmento em verde, confirmado tambem pelo badge "Cambio" da
+     *       tabela desta mesma tela.</li>
+     * </ul>
+     */
+    private static Theme theme() {
+        return ThemeManager.current();
+    }
 
     private static final Locale PT_BR = new Locale("pt", "BR");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -80,6 +95,12 @@ public class ForexCryptoView implements ScreenView {
     private final AssetRepository assetRepository;
     private final QuoteHistoryRepository quoteHistoryRepository;
     private final MarketService marketService;
+    private final SettingRepository settingRepository;
+
+    // "Casas decimais em cripto" (Configurações > Preferências) - recarregado
+    // a cada refresh(), usado só para a quantidade de ativos CRYPTO (câmbio
+    // continua sempre com 2 casas, ver formatQuantity).
+    private int cryptoDecimals = 6;
 
     private final VBox root;
     private final VBox contentBody;
@@ -106,11 +127,13 @@ public class ForexCryptoView implements ScreenView {
     public ForexCryptoView(PositionService positionService,
                             AssetRepository assetRepository,
                             QuoteHistoryRepository quoteHistoryRepository,
-                            MarketService marketService) {
+                            MarketService marketService,
+                            SettingRepository settingRepository) {
         this.positionService = positionService;
         this.assetRepository = assetRepository;
         this.quoteHistoryRepository = quoteHistoryRepository;
         this.marketService = marketService;
+        this.settingRepository = settingRepository;
 
         subtitleLabel = new Label("Cadastre ativos de câmbio ou criptomoeda para começar.");
         subtitleLabel.getStyleClass().add("header-subtitle");
@@ -244,6 +267,9 @@ public class ForexCryptoView implements ScreenView {
     // =====================================================================
 
     private void refresh() {
+        if (settingRepository != null) {
+            cryptoDecimals = parseIntOrDefault(settingRepository.get(SettingsView.SETTING_CRYPTO_DECIMALS, "6"), 6);
+        }
         List<Asset> assets = assetRepository.listAssets(false);
         List<Position> allPositions = positionService.calculateAllPositions(false);
         cachedPositions = allPositions.stream()
@@ -251,7 +277,10 @@ public class ForexCryptoView implements ScreenView {
                 .sorted(Comparator.comparing((Position p) -> p.asset().category())
                         .thenComparing(Comparator.comparingDouble(Position::currentValue).reversed()))
                 .toList();
-        cachedSummary = positionService.calculatePortfolioSummary();
+        // Resumo montado sobre allPositions (carteira inteira, nao a lista ja
+        // filtrada por categoria) — a versao sem argumento recalcularia todas
+        // as posicoes de novo.
+        cachedSummary = positionService.calculatePortfolioSummary(allPositions);
         cachedDailyChanges = marketService.getDailyChanges(assets);
 
         if (selectedAssetId == null || cachedPositions.stream().noneMatch(p -> p.asset().id().equals(selectedAssetId))) {
@@ -320,7 +349,7 @@ public class ForexCryptoView implements ScreenView {
             double unitPrice = p.currentQuantity() > 0 ? p.currentValue() / p.currentQuantity() : 0;
             Double change = cachedDailyChanges.get(asset.id());
 
-            VBox card = buildKpiCard(assetLabel(asset) + " / BRL", formatQuotePrice(unitPrice),
+            VBox card = buildKpiCard(assetLabel(asset) + " / " + CurrencyDisplay.code(), formatQuotePrice(unitPrice),
                     change != null ? change >= 0 : null,
                     change != null ? formatSignedPercent(change) + " no dia" : "sem dado do dia (atualize as cotações)",
                     change == null ? "kpi-footer-neutral" : (change >= 0 ? "kpi-footer-gain" : "kpi-footer-loss"));
@@ -376,7 +405,7 @@ public class ForexCryptoView implements ScreenView {
         Double changePct = cachedDailyChanges.get(asset.id());
 
         Label icon = new Label(tickerAbbreviation(asset));
-        icon.setStyle("-fx-text-fill: " + (crypto ? toHex(COLOR_CATEGORY_CRIPTO) : "-fx-color-accent") + ";"
+        icon.setStyle("-fx-text-fill: " + (crypto ? toHex(theme().categoryCrypto()) : "-fx-color-accent") + ";"
                 + " -fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 12px;");
         StackPane iconBox = new StackPane(icon);
         iconBox.setPrefSize(46, 46);
@@ -434,18 +463,21 @@ public class ForexCryptoView implements ScreenView {
             return;
         }
 
+        Color lineColor = crypto ? theme().neutralWarn() : theme().accentStrong();
         Canvas canvas = new Canvas(640, 220);
         canvas.setId("assetChartCanvas");
-        drawAssetChart(canvas, history, selected.averagePrice());
-        chartCardBody.getChildren().addAll(canvas, buildChartLegend(crypto));
+        drawAssetChart(canvas, history, selected.averagePrice(), lineColor);
+        chartCardBody.getChildren().addAll(canvas, buildChartLegend(crypto, lineColor));
     }
 
     /**
      * Mesma técnica de {@code Canvas}/{@code GraphicsContext} já usada nas
-     * ATV-12/14/15 — grade, área sob a linha, linha secundária (tracejada,
-     * preço médio de compra), linha principal, ponto final, labels de eixo.
+     * ATV-12/14/15 — grade, linha secundária (tracejada, preço médio de
+     * compra), linha principal, ponto final, labels de eixo. Diferente das
+     * outras telas, o template desta tela (Telas.dc.html linhas 861-869) não
+     * preenche área sob a linha principal — por isso não há esse passo aqui.
      */
-    private void drawAssetChart(Canvas canvas, List<QuoteHistory> history, double averagePrice) {
+    private void drawAssetChart(Canvas canvas, List<QuoteHistory> history, double averagePrice, Color lineColor) {
         GraphicsContext gc = canvas.getGraphicsContext2D();
         double width = canvas.getWidth();
         double height = canvas.getHeight();
@@ -482,10 +514,10 @@ public class ForexCryptoView implements ScreenView {
         }
         double avgY = topPad + plotHeight * (1 - (averagePrice - rangeMin) / (rangeMax - rangeMin));
 
-        gc.setStroke(COLOR_CHART_GRID);
+        gc.setStroke(theme().chartGrid());
         gc.setLineWidth(1);
         gc.setFont(Font.font("IBM Plex Mono", 10));
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int gridLines = 5;
         for (int i = 0; i < gridLines; i++) {
             double y = topPad + plotHeight * i / (double) (gridLines - 1);
@@ -494,33 +526,22 @@ public class ForexCryptoView implements ScreenView {
             gc.fillText(formatCompact(value), 0, y + 4);
         }
 
-        double[] areaX = new double[n + 2];
-        double[] areaY = new double[n + 2];
-        System.arraycopy(xs, 0, areaX, 0, n);
-        System.arraycopy(ys, 0, areaY, 0, n);
-        areaX[n] = xs[n - 1];
-        areaY[n] = topPad + plotHeight;
-        areaX[n + 1] = xs[0];
-        areaY[n + 1] = topPad + plotHeight;
-        gc.setFill(COLOR_CHART_AREA);
-        gc.fillPolygon(areaX, areaY, n + 2);
-
-        gc.setStroke(COLOR_AVG_PRICE_LINE);
+        gc.setStroke(theme().textFaint());
         gc.setLineWidth(2);
         gc.setLineDashes(6, 5);
         gc.strokeLine(leftPad, avgY, width - rightPad, avgY);
         gc.setLineDashes((double[]) null);
-        gc.setFill(COLOR_AVG_PRICE_LINE);
+        gc.setFill(theme().textFaint());
         gc.fillText("PM " + formatCompact(averagePrice), width - rightPad - 60, avgY - 6);
 
-        gc.setStroke(COLOR_CHART_LINE_PRIMARY);
+        gc.setStroke(lineColor);
         gc.setLineWidth(2.5);
         gc.strokePolyline(xs, ys, n);
 
-        gc.setFill(COLOR_CHART_LINE_PRIMARY);
+        gc.setFill(lineColor);
         gc.fillOval(xs[n - 1] - 4.5, ys[n - 1] - 4.5, 9, 9);
 
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int[] labelIdx = n <= 5 ? intRange(n) : new int[]{0, n / 4, n / 2, (3 * n) / 4, n - 1};
         for (int idx : labelIdx) {
             LocalDate d = history.get(idx).getDate();
@@ -528,9 +549,9 @@ public class ForexCryptoView implements ScreenView {
         }
     }
 
-    private HBox buildChartLegend(boolean crypto) {
-        HBox item1 = legendItem("Cotação (" + (crypto ? "CoinGecko" : "HG Brasil") + ")", COLOR_CHART_LINE_PRIMARY);
-        HBox item2 = legendItem("Preço médio de compra", COLOR_AVG_PRICE_LINE);
+    private HBox buildChartLegend(boolean crypto, Color lineColor) {
+        HBox item1 = legendItem("Cotação (" + (crypto ? "CoinGecko" : "HG Brasil") + ")", lineColor);
+        HBox item2 = legendItem("Preço médio de compra", theme().textFaint());
         Label caption = new Label(crypto
                 ? "Primeiros até 365 dias vindos da CoinGecko; depois, histórico local."
                 : "Série 100% construída localmente — sem histórico inicial gratuito de câmbio.");
@@ -651,10 +672,10 @@ public class ForexCryptoView implements ScreenView {
 
         Region cryptoFill = new Region();
         cryptoFill.setPrefHeight(9);
-        cryptoFill.setStyle("-fx-background-radius: 5 0 0 5; -fx-background-color: " + toHex(COLOR_CATEGORY_CRIPTO) + ";");
+        cryptoFill.setStyle("-fx-background-radius: 5 0 0 5; -fx-background-color: " + toHex(theme().categoryCrypto()) + ";");
         Region forexFill = new Region();
         forexFill.setPrefHeight(9);
-        forexFill.setStyle("-fx-background-radius: 0 5 5 0; -fx-background-color: " + toHex(COLOR_CATEGORY_CAMBIO) + ";");
+        forexFill.setStyle("-fx-background-radius: 0 5 5 0; -fx-background-color: " + toHex(theme().accent()) + ";");
 
         cryptoFill.prefWidthProperty().bind(track.widthProperty().multiply(cryptoPct / 100.0));
         forexFill.prefWidthProperty().bind(track.widthProperty().multiply(forexPct / 100.0));
@@ -709,8 +730,8 @@ public class ForexCryptoView implements ScreenView {
         grid.add(tableHeaderCell("TIPO", HPos.LEFT), 1, 0);
         grid.add(tableHeaderCell("QUANTIDADE", HPos.RIGHT), 2, 0);
         grid.add(tableHeaderCell("COTAÇÃO ATUAL", HPos.RIGHT), 3, 0);
-        grid.add(tableHeaderCell("INVESTIDO (R$)", HPos.RIGHT), 4, 0);
-        grid.add(tableHeaderCell("ATUAL (R$)", HPos.RIGHT), 5, 0);
+        grid.add(tableHeaderCell("INVESTIDO (" + CurrencyDisplay.code() + ")", HPos.RIGHT), 4, 0);
+        grid.add(tableHeaderCell("ATUAL (" + CurrencyDisplay.code() + ")", HPos.RIGHT), 5, 0);
         grid.add(tableHeaderCell("GANHO / PERDA", HPos.RIGHT), 6, 0);
 
         for (int i = 0; i < filtered.size(); i++) {
@@ -726,8 +747,8 @@ public class ForexCryptoView implements ScreenView {
             Node badgeNode = categoryBadgeCell(asset.category(), last, selected);
             Label qtyNode = tableCell(formatQuantity(p.currentQuantity(), asset.category()), "table-cell-numeric", HPos.RIGHT, last, selected);
             Label priceNode = tableCell(formatQuotePrice(unitPrice), "table-cell-numeric", HPos.RIGHT, last, selected);
-            Label investedNode = tableCell(formatDecimal(p.investedValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
-            Label currentNode = tableCell(formatDecimal(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
+            Label investedNode = tableCell(formatMoney(p.investedValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
+            Label currentNode = tableCell(formatMoney(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
             Node gainLossNode = gainLossCell(p, last, selected);
 
             long assetId = asset.id();
@@ -842,9 +863,9 @@ public class ForexCryptoView implements ScreenView {
         totalLabel.setStyle("-fx-font-family: 'Manrope SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-secondary;");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Label investedLabel = new Label("investido " + formatDecimal(totalInvested, 2));
+        Label investedLabel = new Label("investido " + formatMoney(totalInvested, 2));
         investedLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary;");
-        Label currentLabel = new Label("atual " + formatDecimal(totalCurrent, 2));
+        Label currentLabel = new Label("atual " + formatMoney(totalCurrent, 2));
         currentLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary;");
         Label gainLossLabel = new Label(formatSignedNumber(gainLossAmount, 2) + " (" + formatSignedPercent(gainLossPct) + ")");
         gainLossLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 14px; -fx-text-fill: "
@@ -947,14 +968,41 @@ public class ForexCryptoView implements ScreenView {
     // Parsing / formatação (pt-BR)
     // =====================================================================
 
-    /** 0 decimais para cotações "grandes" (ex.: BTC/ETH), 2 para as demais (ex.: USD/EUR). */
+    /**
+     * 0 decimais para cotações "grandes" (ex.: BTC/ETH), 2 para as demais
+     * (ex.: USD/EUR). O limiar é aplicado ao valor <b>já convertido</b> para a
+     * moeda principal — é uma decisão de legibilidade da coluna, e quem define
+     * a largura do número é o valor que aparece na tela, não o BRL de origem.
+     */
     private static String formatQuotePrice(double value) {
-        return formatDecimal(value, Math.abs(value) >= 100 ? 0 : 2);
+        double converted = CurrencyDisplay.convert(value);
+        return formatDecimal(converted, Math.abs(converted) >= 100 ? 0 : 2);
     }
 
-    /** Quantidade de cripto usa mais casas decimais (unidades fracionárias) que câmbio. */
-    private static String formatQuantity(double qty, Category category) {
-        return formatDecimal(qty, category == Category.CRYPTO ? 6 : 2);
+    /**
+     * Quantidade de cripto usa mais casas decimais (unidades fracionárias)
+     * que câmbio — {@code cryptoDecimals} vem de "Casas decimais em cripto"
+     * (Configurações > Preferências), recarregado a cada {@link #refresh()}.
+     */
+    private String formatQuantity(double qty, Category category) {
+        return formatDecimal(qty, category == Category.CRYPTO ? cryptoDecimals : 2);
+    }
+
+    private static Integer parseIntOrDefault(String text, int fallback) {
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * Valor monetario sem simbolo, ja convertido para a moeda principal
+     * (Configuracoes > Preferencias). Todo valor que o app calcula e BRL — a
+     * conversao acontece so aqui, na formatacao. Ver {@link CurrencyDisplay}.
+     */
+    private static String formatMoney(double brlValue, int fractionDigits) {
+        return formatDecimal(CurrencyDisplay.convert(brlValue), fractionDigits);
     }
 
     private static String formatDecimal(double value, int fractionDigits) {
@@ -965,24 +1013,26 @@ public class ForexCryptoView implements ScreenView {
     }
 
     private static String formatCurrency(double value) {
-        return "R$ " + formatDecimal(value, 2);
+        return CurrencyDisplay.symbol() + " " + formatMoney(value, 2);
     }
 
+    /** Rotulo do eixo Y do grafico — valor monetario, ja na moeda principal. */
     private static String formatCompact(double value) {
-        if (Math.abs(value) >= 1000) {
-            return formatDecimal(value / 1000.0, 0) + "k";
+        double converted = CurrencyDisplay.convert(value);
+        if (Math.abs(converted) >= 1000) {
+            return formatDecimal(converted / 1000.0, 0) + "k";
         }
-        return formatDecimal(value, 0);
+        return formatDecimal(converted, 0);
     }
 
     private static String formatSignedCurrency(double value) {
         String sign = value < 0 ? "− " : "+ ";
-        return sign + "R$ " + formatDecimal(Math.abs(value), 2);
+        return sign + CurrencyDisplay.symbol() + " " + formatMoney(Math.abs(value), 2);
     }
 
     private static String formatSignedNumber(double value, int fractionDigits) {
         String sign = value < 0 ? "−" : "+";
-        return sign + formatDecimal(Math.abs(value), fractionDigits);
+        return sign + formatMoney(Math.abs(value), fractionDigits);
     }
 
     private static String formatSignedPercent(double value) {

@@ -1,8 +1,16 @@
 package com.investimento.app.ui.screens;
 
+import com.investimento.app.api.brapi.BrapiClientImpl;
+import com.investimento.app.api.coingecko.CoinGeckoClientImpl;
+import com.investimento.app.api.hgbrasil.HgBrasilClientImpl;
+import com.investimento.app.repository.IndicatorHistoryRepositoryImpl;
+import com.investimento.app.repository.QuoteHistoryRepositoryImpl;
+import com.investimento.app.repository.RateHistoryRepositoryImpl;
 import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.repository.SettingRepositoryImpl;
 import com.investimento.app.service.BackupService;
+import com.investimento.app.service.MarketService;
+import com.investimento.app.service.MarketServiceImpl;
 import javafx.application.Platform;
 
 import java.io.File;
@@ -72,8 +80,18 @@ public final class SettingsViewManualTest {
         AtomicInteger onDataRestoredCount = new AtomicInteger(0);
         Runnable onDataRestored = onDataRestoredCount::incrementAndGet;
 
+        // Clientes reais (nunca chamados nestes cenarios - so exercitados se
+        // "Testar conexao" for clicado, o que nenhum cenario abaixo faz) +
+        // MarketService real sobre o mesmo banco em memoria, so para
+        // satisfazer a nova dependencia de SettingsView (getRecentSyncs()).
+        MarketService marketService = new MarketServiceImpl(new HgBrasilClientImpl(), new BrapiClientImpl(),
+                new CoinGeckoClientImpl(), new RateHistoryRepositoryImpl(connection),
+                new IndicatorHistoryRepositoryImpl(connection), new QuoteHistoryRepositoryImpl(connection),
+                settingRepository);
+
         AtomicReference<SettingsView> viewRef = new AtomicReference<>();
-        runOnFxAndWait(() -> viewRef.set(new SettingsView(settingRepository, backupService, onDataRestored)));
+        runOnFxAndWait(() -> viewRef.set(new SettingsView(settingRepository, backupService, onDataRestored,
+                new HgBrasilClientImpl(), new BrapiClientImpl(), new CoinGeckoClientImpl(), marketService)));
         SettingsView view = viewRef.get();
 
         scenario1_defaultsEmptyAndMasked(view);

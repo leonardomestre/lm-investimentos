@@ -7,6 +7,10 @@ import com.investimento.app.dto.FixedIncomeProjectionPoint;
 import com.investimento.app.dto.Position;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.CurrencyDisplay;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
+import javafx.concurrent.Task;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -58,14 +62,15 @@ import java.util.TreeMap;
  */
 public class FixedIncomeView implements ScreenView {
 
-    // Cores duplicadas de theme.css/paleta.md — Canvas desenha imperativamente
-    // e não lê variável -fx-color-* do CSS (mesma nota das ATV-12/14).
-    private static final Color COLOR_CHART_GRID = Color.web("#eeebe5");
-    private static final Color COLOR_CHART_AXIS_TEXT = Color.web("#a2a8ab");
-    private static final Color COLOR_GROSS_LINE = Color.web("#2f6f5e");
-    private static final Color COLOR_GROSS_AREA = Color.web("#3d9c78", 0.1);
-    private static final Color COLOR_NET_LINE = Color.web("#c9a227");
-    private static final Color COLOR_TODAY_LINE = Color.web("#c3bfb6");
+    /**
+     * Cores de grafico do tema ativo (ver {@link ThemeManager}) — linha do
+     * valor bruto em {@code accentStrong}, linha do liquido em
+     * {@code neutralWarn}, marcador vertical de "hoje" em
+     * {@code chartLineSecondary}.
+     */
+    private static Theme theme() {
+        return ThemeManager.current();
+    }
 
     private static final Locale PT_BR = new Locale("pt", "BR");
     private static final String[] MONTH_ABBR =
@@ -165,14 +170,21 @@ public class FixedIncomeView implements ScreenView {
     // =====================================================================
 
     private void refresh() {
-        // Atualiza CDI/SELIC (rate_history) e IPCA (indicator_history), usados
-        // pela formula de juros compostos - sincrono, mesmo padrao ja usado
-        // por DashboardView.refresh() (ATV-12): cada metodo respeita seu
-        // proprio TTL em memoria (5 min / 6h), entao cliques repetidos em
-        // "Recalcular projeções" nao custam requisicao de rede toda vez.
-        marketService.getMacroSnapshot();
-        marketService.getIndicators();
+        refresh(true);
+    }
 
+    /**
+     * @param warmRatesInBackground dispara a renovação de CDI/SELIC/IPCA em
+     *                              background ao final. Falso apenas no
+     *                              redesenho que a própria renovação agenda —
+     *                              sem esse corte, cada redesenho pediria uma
+     *                              nova renovação, indefinidamente.
+     */
+    private void refresh(boolean warmRatesInBackground) {
+        // Projeção calculada a partir de rate_history/indicator_history, que
+        // sao tabelas do banco: os valores da ultima busca bem-sucedida
+        // continuam la entre aberturas do app, entao ha o que desenhar antes
+        // de qualquer rede.
         cachedPositions = positionService.calculateAllPositions(false).stream()
                 .filter(p -> p.asset().category() == Category.FIXED_INCOME)
                 .sorted(Comparator.comparing(
@@ -193,6 +205,37 @@ public class FixedIncomeView implements ScreenView {
                 + " · projeção recalculada com Selic e CDI de hoje");
 
         renderAll();
+
+        if (warmRatesInBackground) {
+            warmRatesAsync();
+        }
+    }
+
+    /**
+     * Renova CDI/SELIC ({@code rate_history}) e IPCA ({@code
+     * indicator_history}) fora da FX thread e redesenha a projeção quando os
+     * valores novos já estão gravados.
+     *
+     * <p>Estas duas chamadas eram síncronas dentro de {@code refresh()}: com o
+     * cache vencido, abrir a tela ou clicar em "Recalcular projeções"
+     * disparava uma requisição HTTP na thread da interface e a janela ficava
+     * congelada até a resposta. As duas já tratam falha internamente
+     * (mantendo o último valor conhecido), então não há {@code setOnFailed} —
+     * a projeção segue desenhada com as taxas que já estavam no banco.</p>
+     */
+    private void warmRatesAsync() {
+        Task<Void> task = new Task<>() {
+            @Override
+            protected Void call() {
+                marketService.getMacroSnapshot();
+                marketService.getIndicators();
+                return null;
+            }
+        };
+        task.setOnSucceeded(ev -> refresh(false));
+        Thread thread = new Thread(task, "rates-fixed-income");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void renderAll() {
@@ -385,10 +428,10 @@ public class FixedIncomeView implements ScreenView {
         }
 
         // 1. grade horizontal + labels eixo Y
-        gc.setStroke(COLOR_CHART_GRID);
+        gc.setStroke(theme().chartGrid());
         gc.setLineWidth(1);
         gc.setFont(Font.font("IBM Plex Mono", 10));
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int gridLines = 5;
         for (int i = 0; i < gridLines; i++) {
             double y = topPad + plotHeight * i / (double) (gridLines - 1);
@@ -406,40 +449,40 @@ public class FixedIncomeView implements ScreenView {
         areaY[n] = topPad + plotHeight;
         areaX[n + 1] = xs[0];
         areaY[n + 1] = topPad + plotHeight;
-        gc.setFill(COLOR_GROSS_AREA);
+        gc.setFill(theme().chartArea());
         gc.fillPolygon(areaX, areaY, n + 2);
 
         // 3. linha vertical "hoje", so se o titulo ainda nao venceu
         LocalDate today = LocalDate.now();
         if (!today.isBefore(start) && !today.isAfter(end)) {
             double todayX = leftPad + plotWidth * ChronoUnit.DAYS.between(start, today) / (double) totalDays;
-            gc.setStroke(COLOR_TODAY_LINE);
+            gc.setStroke(theme().chartLineSecondary());
             gc.setLineWidth(1.5);
             gc.strokeLine(todayX, topPad, todayX, topPad + plotHeight);
-            gc.setFill(COLOR_CHART_AXIS_TEXT);
+            gc.setFill(theme().chartAxisText());
             gc.fillText("hoje", todayX - 12, topPad - 6);
         }
 
         // 4. linha liquida (tracejada)
-        gc.setStroke(COLOR_NET_LINE);
+        gc.setStroke(theme().neutralWarn());
         gc.setLineWidth(2);
         gc.setLineDashes(7, 5);
         gc.strokePolyline(xs, netYs, n);
         gc.setLineDashes((double[]) null);
 
         // 5. linha bruta (solida)
-        gc.setStroke(COLOR_GROSS_LINE);
+        gc.setStroke(theme().accentStrong());
         gc.setLineWidth(2.5);
         gc.strokePolyline(xs, grossYs, n);
 
         // 6. pontos finais destacados
-        gc.setFill(COLOR_GROSS_LINE);
+        gc.setFill(theme().accentStrong());
         gc.fillOval(xs[n - 1] - 4.5, grossYs[n - 1] - 4.5, 9, 9);
-        gc.setFill(COLOR_NET_LINE);
+        gc.setFill(theme().neutralWarn());
         gc.fillOval(xs[n - 1] - 4.5, netYs[n - 1] - 4.5, 9, 9);
 
         // 7. labels eixo X (inicio, ~1/4, meio, ~3/4, fim)
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int[] labelIdx = n <= 5 ? intRange(n) : new int[]{0, n / 4, n / 2, (3 * n) / 4, n - 1};
         for (int idx : labelIdx) {
             LocalDate d = points.get(idx).date();
@@ -449,8 +492,8 @@ public class FixedIncomeView implements ScreenView {
     }
 
     private HBox buildProjectionLegend(FixedIncomeProjectionPoint atMaturity) {
-        HBox item1 = legendItem("Valor bruto projetado", COLOR_GROSS_LINE);
-        HBox item2 = legendItem("Valor líquido (IR regressivo)", COLOR_NET_LINE);
+        HBox item1 = legendItem("Valor bruto projetado", theme().accentStrong());
+        HBox item2 = legendItem("Valor líquido (IR regressivo)", theme().neutralWarn());
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
@@ -541,8 +584,8 @@ public class FixedIncomeView implements ScreenView {
             Label rateNode = tableCell(contractedRateLabel(asset), "table-cell-numeric", HPos.LEFT, last, selected);
             Label appliedNode = tableCell(formatDate(asset.investmentDate()), "table-row-secondary", HPos.LEFT, last, selected);
             Label maturityNode = tableCell(formatDate(asset.maturityDate()), "table-row-secondary", HPos.LEFT, last, selected);
-            Label grossNode = tableCell(formatDecimal(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
-            Label netNode = tableCell(formatDecimal(netValueOf(asset.id()), 2), "table-cell-net", HPos.RIGHT, last, selected);
+            Label grossNode = tableCell(formatMoney(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
+            Label netNode = tableCell(formatMoney(netValueOf(asset.id()), 2), "table-cell-net", HPos.RIGHT, last, selected);
 
             long assetId = asset.id();
             for (Node n : List.of(titleNode, indexerNode, rateNode, appliedNode, maturityNode, grossNode, netNode)) {
@@ -629,9 +672,9 @@ public class FixedIncomeView implements ScreenView {
         totalLabel.setStyle("-fx-font-family: 'Manrope SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-secondary;");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Label grossLabel = new Label("bruto " + formatDecimal(totalGross, 2));
+        Label grossLabel = new Label("bruto " + formatMoney(totalGross, 2));
         grossLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary;");
-        Label netLabel = new Label("líquido " + formatDecimal(totalNet, 2));
+        Label netLabel = new Label("líquido " + formatMoney(totalNet, 2));
         netLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 14px; -fx-text-fill: -fx-color-accent-strong;");
         HBox values = new HBox(26, grossLabel, netLabel);
         row.getChildren().addAll(totalLabel, spacer, values);
@@ -698,7 +741,7 @@ public class FixedIncomeView implements ScreenView {
         Region fill = new Region();
         fill.setPrefHeight(18);
         fill.setStyle("-fx-background-radius: 4; -fx-background-color: "
-                + (highlight ? toHex(COLOR_NET_LINE) : toHex(COLOR_GROSS_LINE)) + ";");
+                + (highlight ? toHex(theme().neutralWarn()) : toHex(theme().accentStrong())) + ";");
         double widthFraction = maxValue > 0 ? Math.min(1.0, value / maxValue) : 0;
         fill.prefWidthProperty().bind(track.widthProperty().multiply(widthFraction));
         // StackPane estica os filhos ao tamanho maximo por padrao - sem isto a
@@ -708,7 +751,7 @@ public class FixedIncomeView implements ScreenView {
         StackPane barStack = new StackPane(track, fill);
         barStack.setAlignment(Pos.CENTER_LEFT);
 
-        Label valueLabel = new Label(formatDecimal(value, 2));
+        Label valueLabel = new Label(formatMoney(value, 2));
         valueLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary;");
 
         grid.add(yearLabel, 0, 0);
@@ -874,6 +917,15 @@ public class FixedIncomeView implements ScreenView {
     // Parsing / formatação (pt-BR)
     // =====================================================================
 
+    /**
+     * Valor monetario sem simbolo, ja convertido para a moeda principal
+     * (Configuracoes > Preferencias). Todo valor que o app calcula e BRL — a
+     * conversao acontece so aqui, na formatacao. Ver {@link CurrencyDisplay}.
+     */
+    private static String formatMoney(double brlValue, int fractionDigits) {
+        return formatDecimal(CurrencyDisplay.convert(brlValue), fractionDigits);
+    }
+
     private static String formatDecimal(double value, int fractionDigits) {
         NumberFormat nf = NumberFormat.getNumberInstance(PT_BR);
         nf.setMinimumFractionDigits(fractionDigits);
@@ -882,12 +934,14 @@ public class FixedIncomeView implements ScreenView {
     }
 
     private static String formatCurrency(double value) {
-        return "R$ " + formatDecimal(value, 2);
+        return CurrencyDisplay.symbol() + " " + formatMoney(value, 2);
     }
 
+    /** Rotulo do eixo Y do grafico — valor monetario, ja na moeda principal. */
     private static String formatCompact(double value) {
-        if (Math.abs(value) >= 1000) {
-            return formatDecimal(value / 1000.0, 0) + "k";
+        double converted = CurrencyDisplay.convert(value);
+        if (Math.abs(converted) >= 1000) {
+            return formatDecimal(converted / 1000.0, 0) + "k";
         }
         return formatDecimal(value, 0);
     }

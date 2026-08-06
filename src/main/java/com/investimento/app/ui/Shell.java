@@ -2,6 +2,7 @@ package com.investimento.app.ui;
 
 import com.investimento.app.api.brapi.BrapiClient;
 import com.investimento.app.api.coingecko.CoinGeckoClient;
+import com.investimento.app.api.hgbrasil.HgBrasilClient;
 import com.investimento.app.repository.AssetRepository;
 import com.investimento.app.repository.DistributionRepository;
 import com.investimento.app.repository.PortfolioSnapshotRepository;
@@ -47,11 +48,17 @@ public class Shell extends BorderPane {
     private final Map<Screen, ScreenView> views = new EnumMap<>(Screen.class);
     private final Sidebar sidebar;
 
+    // Guardados so para reconfigurar a moeda de exibicao a cada navegacao
+    // (ver select) - nenhuma tela e montada a partir deles aqui.
+    private final SettingRepository settingRepository;
+    private final MarketService marketService;
+
     public Shell(MarketService marketService,
                  PositionService positionService,
                  AssetService assetService,
                  TransactionService transactionService,
                  IncomeTaxService incomeTaxService,
+                 HgBrasilClient hgBrasilClient,
                  BrapiClient brapiClient,
                  CoinGeckoClient coinGeckoClient,
                  AssetRepository assetRepository,
@@ -63,16 +70,20 @@ public class Shell extends BorderPane {
                  BackupService backupService,
                  Screen initialScreen,
                  Runnable onDataRestored) {
+        this.settingRepository = settingRepository;
+        this.marketService = marketService;
+
         views.put(Screen.DASHBOARD, new DashboardView(marketService, positionService, assetRepository,
-                portfolioSnapshotRepository, rateHistoryRepository, this::select));
+                portfolioSnapshotRepository, rateHistoryRepository, settingRepository, this::select));
         views.put(Screen.STOCKS_FIIS, new StocksFiisView(positionService, assetRepository, quoteHistoryRepository,
                 distributionRepository, marketService));
         views.put(Screen.FIXED_INCOME, new FixedIncomeView(positionService, marketService));
         views.put(Screen.FOREX_CRYPTO, new ForexCryptoView(positionService, assetRepository,
-                quoteHistoryRepository, marketService));
+                quoteHistoryRepository, marketService, settingRepository));
         views.put(Screen.REGISTRATION, new RegistrationView(assetService, transactionService, brapiClient, coinGeckoClient));
         views.put(Screen.TAX_HISTORY, new TaxHistoryView(transactionService, incomeTaxService, positionService, assetService));
-        views.put(Screen.SETTINGS, new SettingsView(settingRepository, backupService, onDataRestored));
+        views.put(Screen.SETTINGS, new SettingsView(settingRepository, backupService, onDataRestored,
+                hgBrasilClient, brapiClient, coinGeckoClient, marketService));
 
         sidebar = new Sidebar(this::select);
         setLeft(sidebar);
@@ -81,6 +92,14 @@ public class Shell extends BorderPane {
     }
 
     private void select(Screen screen) {
+        // Antes do onShow(), nao depois: a tela formata os valores dentro do
+        // proprio refresh(), entao a moeda tem que estar resolvida quando ele
+        // roda. E aqui, e nao so na abertura do app, porque assim trocar a
+        // moeda em Configuracoes vale ao navegar para qualquer outra tela sem
+        // reiniciar. Com a moeda em BRL (padrao) isto nao faz chamada de rede
+        // nenhuma — ver CurrencyDisplay.configure.
+        CurrencyDisplay.configure(settingRepository, marketService);
+
         setCenter(views.get(screen).getRoot());
         views.get(screen).onShow();
         sidebar.markActive(screen);

@@ -7,6 +7,16 @@
  * sem atualizar aquela documentação também.
  *
  * Uso: scene.getStylesheets().add(getClass().getResource("/theme.css").toExternalForm());
+ *
+ * TEMA ESCURO: este arquivo é a BASE (estrutura + paleta clara). O tema
+ * escuro é o /theme-dark.css, aplicado POR CIMA deste (segundo stylesheet da
+ * Scene, ver ui/ThemeManager.java) e contendo só a redefinição dos tokens
+ * -fx-color-* do bloco .root abaixo. Consequência prática ao editar aqui:
+ * toda regra de componente deve pintar via token (-fx-color-*), nunca com
+ * hex/`white` literal — um literal não tem como ser trocado pelo tema
+ * escuro. Os tokens *-inverse/on-* logo abaixo existem exatamente por isso:
+ * antes eles eram "text-primary de fundo + white de texto" hardcoded, que no
+ * escuro viraria texto branco sobre fundo claro.
  */
 
 /* ---------- Fontes ---------- */
@@ -57,6 +67,13 @@
     -fx-color-text-faint:     #8a9196;
     -fx-color-text-eyebrow:   #5c666b;
     -fx-color-text-disabled:  #a9aeb1;
+    /* Placeholder de campo (-fx-prompt-text-fill). Existe como token porque o
+       padrao do Modena e derive(-fx-control-inner-background, -30%) — ou
+       seja, "o fundo, 30% mais escuro". Sobre fundo branco isso da um cinza
+       claro correto por acaso; sobre o fundo escuro do tema escuro daria
+       quase preto, ilegivel. Este valor e o mesmo cinza que o Modena
+       produzia no tema claro, entao nada muda ali. */
+    -fx-color-text-placeholder: #a9aeb1;
 
     /* ---------- Sidebar (tema escuro fixo) ---------- */
     -fx-color-sidebar-bg:              #14181a;
@@ -74,6 +91,15 @@
     -fx-color-accent-hover:      #1f5346;
     -fx-color-on-accent:         #0c1512;
 
+    /* ---------- Preenchimento "invertido" (botao primario, pill ativa,
+       opcao de segmented selecionada, icone de linha de ativo) ----------
+       No tema claro e literalmente o mesmo par que estava hardcoded antes
+       (fundo #14181a = text-primary, texto branco); existe como token
+       proprio porque no tema escuro esse par inverte junto, enquanto
+       text-primary (cor de TEXTO) segue outro caminho. */
+    -fx-color-fill-inverse:      #14181a;
+    -fx-color-on-fill-inverse:   #ffffff;
+
     /* ---------- Status ---------- */
     -fx-color-gain:              #2e7d4f;
     -fx-color-gain-bg:           #f2f8f4;
@@ -83,6 +109,11 @@
     -fx-color-neutral-warn:      #c9a227;
     -fx-color-neutral-warn-dark: #a08316;
     -fx-color-neutral-warn-bg:   #fbf6e8;
+    /* Texto/glifo POR CIMA de um preenchimento solido de gain/loss (badge de
+       maior variacao do dia, opcao "Venda" selecionada). No claro e branco;
+       no escuro gain/loss sao tons claros, entao inverte para quase-preto. */
+    -fx-color-on-gain:           #ffffff;
+    -fx-color-on-loss:           #ffffff;
 
     /* ---------- Zona de perigo ---------- */
     -fx-color-danger-dark-bg:     #241a18;
@@ -188,12 +219,39 @@
 }
 
 .button-primary {
-    -fx-background-color: -fx-color-text-primary;
+    -fx-background-color: -fx-color-fill-inverse;
     -fx-background-radius: 10;
     -fx-padding: 10 16;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
+    -fx-text-fill: -fx-color-on-fill-inverse;
+    -fx-cursor: hand;
+}
+
+/* ATV-13 (Cadastro) — "Salvar ativo": no template esse botão é verde
+   (accent-strong), diferente do "Atualizar cotações agora" do Dashboard
+   (button-primary, fundo escuro) — mesmo padrao de botao/radius/padding,
+   só a cor de fundo muda, entao nao reaproveita .button-primary. */
+.button-accent-strong {
+    -fx-background-color: -fx-color-accent-strong;
+    -fx-background-radius: 10;
+    -fx-padding: 11 18;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
     -fx-text-fill: white;
+    -fx-cursor: hand;
+}
+
+/* Botão "de ação viva" dentro de card escuro (ex.: "Salvar transação",
+   "Exportar backup agora", "Marcar como paga") — bg accent + texto on-accent,
+   diferente de .button-accent-strong (branco sobre verde escuro). */
+.button-accent {
+    -fx-background-color: -fx-color-accent;
+    -fx-background-radius: 10;
+    -fx-padding: 11 18;
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: -fx-color-on-accent;
     -fx-cursor: hand;
 }
 
@@ -268,12 +326,12 @@
     -fx-cursor: hand;
 }
 .tab-pill-active {
-    -fx-background-color: -fx-color-text-primary;
+    -fx-background-color: -fx-color-fill-inverse;
     -fx-background-radius: 8;
     -fx-padding: 6 11;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 12px;
-    -fx-text-fill: white;
+    -fx-text-fill: -fx-color-on-fill-inverse;
 }
 
 /* =========================================================
@@ -339,6 +397,14 @@
     -fx-max-width: 26; -fx-max-height: 26;
     -fx-alignment: center;
 }
+/* Seta ▲/▼ dentro do badge acima — era um -fx-text-fill:white inline no
+   DashboardView; virou classe para o tema escuro poder inverter. */
+.highlight-badge-glyph {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 11px;
+}
+.highlight-badge-gain .highlight-badge-glyph { -fx-text-fill: -fx-color-on-gain; }
+.highlight-badge-loss .highlight-badge-glyph { -fx-text-fill: -fx-color-on-loss; }
 
 /* =========================================================
    Campo de formulário
@@ -354,6 +420,7 @@
     -fx-font-family: "Manrope Medium";
     -fx-font-size: 14px;
     -fx-text-fill: -fx-color-text-disabled;
+    -fx-prompt-text-fill: -fx-color-text-placeholder;
     /* Foco: prefira o mecanismo nativo do JavaFX, nao tente imitar
        box-shadow com Effect — TextField ja suporta isto: */
     -fx-focus-color: -fx-color-accent;
@@ -396,8 +463,109 @@
     -fx-font-family: "Manrope Medium";
     -fx-font-size: 14px;
     -fx-text-fill: white;
+    -fx-prompt-text-fill: -fx-color-text-placeholder;
     -fx-focus-color: -fx-color-accent;
     -fx-faint-focus-color: rgba(61,156,120,0.14);
+}
+
+/* =========================================================
+   Seletor de data (DatePicker)
+
+   O DatePicker recebe a classe .text-field/.text-field-dark (acima) para
+   pintar o campo em si (fundo/borda/radius/fonte), igual ao template
+   (que mostra a data como um campo de texto simples, sem icone). Sem as
+   regras abaixo, o editor interno e o botao de calendario do skin padrao
+   do Modena continuam com o proprio fundo/borda brancos por cima do
+   nosso campo, e o popup do calendario abre com o tema branco/azul padrao
+   do JavaFX — nenhum dos dois bate com o resto da tela.
+   ========================================================= */
+
+.date-picker > .text-field {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+    -fx-font-family: "Manrope Medium";
+    -fx-font-size: 14px;
+    -fx-text-fill: -fx-color-text-disabled;
+}
+.date-picker.text-field-dark > .text-field {
+    -fx-text-fill: white;
+}
+
+.date-picker > .arrow-button {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 0 10 10 0;
+    -fx-padding: 0 10 0 4;
+}
+.date-picker > .arrow-button > .arrow {
+    -fx-background-color: -fx-color-text-muted;
+    -fx-background-insets: 0;
+}
+.date-picker.text-field-dark > .arrow-button > .arrow {
+    -fx-background-color: -fx-color-sidebar-text;
+}
+.date-picker:focused > .arrow-button > .arrow {
+    -fx-background-color: -fx-color-accent;
+}
+
+.date-picker-popup {
+    -fx-background-color: -fx-color-bg-surface;
+    -fx-background-radius: 11;
+    -fx-border-color: -fx-color-border-card;
+    -fx-border-radius: 11;
+    -fx-effect: dropshadow(gaussian, rgba(20,24,26,0.28), 16, 0, 0, 8);
+    -fx-padding: 10;
+}
+.date-picker-popup .spinner .button,
+.date-picker-popup .spinner .button:hover {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+}
+.date-picker-popup .spinner .button:hover {
+    -fx-background-color: -fx-color-bg-surface-tint;
+}
+.date-picker-popup .spinner .label,
+.date-picker-popup .month-year-pane .label {
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: -fx-color-text-primary;
+}
+.date-picker-popup .day-name-cell {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 10px;
+    -fx-text-fill: -fx-color-text-faint;
+}
+.date-picker-popup .day-cell {
+    -fx-font-family: "Manrope Medium";
+    -fx-font-size: 12px;
+    -fx-text-fill: -fx-color-text-secondary;
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+}
+.date-picker-popup .day-cell:hover {
+    -fx-background-color: -fx-color-bg-surface-tint;
+    -fx-background-radius: 8;
+}
+.date-picker-popup .day-cell:selected {
+    -fx-background-color: -fx-color-accent-strong;
+    -fx-background-radius: 8;
+    -fx-text-fill: white;
+}
+.date-picker-popup .day-cell:selected:hover {
+    -fx-background-color: -fx-color-accent-hover;
+}
+.date-picker-popup .today {
+    -fx-border-color: -fx-color-accent;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+.date-picker-popup .day-cell:disabled,
+.date-picker-popup .next-month,
+.date-picker-popup .previous-month {
+    -fx-text-fill: -fx-color-text-faint;
+    -fx-opacity: 0.5;
 }
 
 /* =========================================================
@@ -416,9 +584,11 @@
     -fx-cursor: hand;
 }
 .segmented-option-selected {
-    -fx-background-color: -fx-color-text-primary;
+    -fx-background-color: -fx-color-fill-inverse;
+    -fx-background-radius: 10;
     -fx-border-color: transparent;
-    -fx-text-fill: white;
+    -fx-border-radius: 10;
+    -fx-text-fill: -fx-color-on-fill-inverse;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
     -fx-pref-height: 42;
@@ -437,7 +607,9 @@
 }
 .segmented-option-selected-buy {
     -fx-background-color: -fx-color-accent-strong;
+    -fx-background-radius: 10;
     -fx-border-color: transparent;
+    -fx-border-radius: 10;
     -fx-text-fill: white;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
@@ -446,8 +618,10 @@
 }
 .segmented-option-selected-sell {
     -fx-background-color: -fx-color-loss;
+    -fx-background-radius: 10;
     -fx-border-color: transparent;
-    -fx-text-fill: white;
+    -fx-border-radius: 10;
+    -fx-text-fill: -fx-color-on-loss;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
     -fx-pref-height: 42;
@@ -540,11 +714,45 @@
     -fx-border-width: 1.5;
 }
 .asset-row-icon {
-    -fx-background-color: -fx-color-text-primary;
+    -fx-background-color: -fx-color-fill-inverse;
     -fx-background-radius: 8;
     -fx-min-width: 28; -fx-min-height: 28;
     -fx-max-width: 28; -fx-max-height: 28;
     -fx-alignment: center;
+}
+/* Iniciais dentro do icone acima — era -fx-text-fill:white inline no
+   RegistrationView; virou classe pelo mesmo motivo do badge de destaque. */
+.asset-row-icon-text {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 10px;
+    -fx-text-fill: -fx-color-on-fill-inverse;
+}
+
+/* =========================================================
+   Toggle switch (ex.: "Ocultar valores no dashboard" — Configurações)
+   ========================================================= */
+
+.toggle-track {
+    -fx-background-color: -fx-color-border-pill;
+    -fx-background-radius: 14;
+    -fx-min-width: 46; -fx-pref-width: 46; -fx-max-width: 46;
+    -fx-min-height: 26; -fx-pref-height: 26; -fx-max-height: 26;
+    -fx-padding: 3;
+    -fx-cursor: hand;
+}
+.toggle-track-on {
+    -fx-background-color: -fx-color-accent-strong;
+    -fx-background-radius: 14;
+    -fx-min-width: 46; -fx-pref-width: 46; -fx-max-width: 46;
+    -fx-min-height: 26; -fx-pref-height: 26; -fx-max-height: 26;
+    -fx-padding: 3;
+    -fx-cursor: hand;
+}
+.toggle-thumb {
+    -fx-background-color: white;
+    -fx-background-radius: 10;
+    -fx-min-width: 20; -fx-pref-width: 20; -fx-max-width: 20;
+    -fx-min-height: 20; -fx-pref-height: 20; -fx-max-height: 20;
 }
 
 /* =========================================================
@@ -568,6 +776,21 @@
     -fx-font-size: 12px;
     -fx-text-fill: -fx-color-danger-dark-text;
     -fx-cursor: hand;
+}
+
+/* =========================================================
+   ScrollPane
+
+   O skin padrao do Modena pinta um fundo proprio (-fx-background,
+   praticamente branco) no ScrollPane e no viewport. No tema claro isso
+   passava despercebido porque coincidia com o branco dos cards; no tema
+   escuro apareceria como um retangulo branco atras do conteudo. Deixar
+   transparente resolve nos dois temas de uma vez.
+   ========================================================= */
+
+.scroll-pane,
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
 }
 
 /* =========================================================

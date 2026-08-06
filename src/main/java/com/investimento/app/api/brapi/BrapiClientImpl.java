@@ -14,10 +14,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,6 +44,15 @@ public class BrapiClientImpl implements BrapiClient {
      */
     private static final Set<String> DEMO_GROUP = Set.of("PETR4", "VALE3", "ITUB4", "MGLU3");
 
+    /**
+     * Sem timeout, uma conexao aceita mas nunca respondida trava a thread
+     * chamadora indefinidamente — inclusive a FX thread, via o caminho
+     * sincrono de validacao de ticker no cadastro de ativo. Ver a mesma nota em
+     * {@code HgBrasilClientImpl}.
+     */
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
+
     private final String token;
     private final HttpClient httpClient;
 
@@ -50,11 +61,20 @@ public class BrapiClientImpl implements BrapiClient {
 
     public BrapiClientImpl(String token) {
         this.token = token;
-        this.httpClient = HttpClient.newHttpClient();
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(CONNECT_TIMEOUT)
+                .build();
     }
 
+    /**
+     * Resolve o token por {@code BRAPI_TOKEN}. Nao ha token embutido no
+     * codigo: este repositorio e publico e qualquer literal aqui vira
+     * credencial vazada. O app real cadastra o token em Configuracoes
+     * ({@code settings.brapi.token}, ver {@code ApiKeyResolver}); este
+     * construtor existe so para os {@code main()} de teste manual.
+     */
     public BrapiClientImpl() {
-        this(System.getenv("BRAPI_TOKEN") != null ? System.getenv("BRAPI_TOKEN") : "jS1ByoxrxvQAaFBZmcZMU6");
+        this(System.getenv("BRAPI_TOKEN"));
     }
 
     public int getRequestCount() {
@@ -115,7 +135,11 @@ public class BrapiClientImpl implements BrapiClient {
 
     @Override
     public List<HistoricalPoint> getHistory(String ticker, String range, String interval) throws BrapiException {
-        JSONObject root = get("/quote/" + ticker, Map.of("range", range, "interval", interval));
+        // Ticker entra num segmento de PATH (nao de query), entao precisa ser
+        // escapado aqui: um valor com "/", "?" ou espaco montaria outra URL
+        // (ou faria URI.create lancar IllegalArgumentException crua, fora do
+        // contrato BrapiException do metodo).
+        JSONObject root = get("/quote/" + encodePathSegment(ticker), Map.of("range", range, "interval", interval));
         JSONArray results = root.optJSONArray("results");
         if (results == null || results.isEmpty()) {
             throw new BrapiException("NOT_FOUND", 200, "Ticker não encontrado: " + ticker);
@@ -127,18 +151,23 @@ public class BrapiClientImpl implements BrapiClient {
         }
 
         List<HistoricalPoint> history = new ArrayList<>();
-        for (int i = 0; i < points.length(); i++) {
-            JSONObject point = points.getJSONObject(i);
-            LocalDate date = Instant.ofEpochSecond(point.getLong("date")).atZone(ZoneOffset.UTC).toLocalDate();
-            history.add(new HistoricalPoint(
-                    date,
-                    optDouble(point, "open"),
-                    optDouble(point, "high"),
-                    optDouble(point, "low"),
-                    optDouble(point, "close"),
-                    optLong(point, "volume"),
-                    optDouble(point, "adjustedClose")
-            ));
+        try {
+            for (int i = 0; i < points.length(); i++) {
+                JSONObject point = points.getJSONObject(i);
+                LocalDate date = Instant.ofEpochSecond(point.getLong("date")).atZone(ZoneOffset.UTC).toLocalDate();
+                history.add(new HistoricalPoint(
+                        date,
+                        optDouble(point, "open"),
+                        optDouble(point, "high"),
+                        optDouble(point, "low"),
+                        optDouble(point, "close"),
+                        optLong(point, "volume"),
+                        optDouble(point, "adjustedClose")
+                ));
+            }
+        } catch (JSONException e) {
+            throw new BrapiException("UNEXPECTED_PAYLOAD", 200,
+                    "Formato inesperado no historico de " + ticker + ": " + e.getMessage());
         }
         return history;
     }
@@ -152,41 +181,58 @@ public class BrapiClientImpl implements BrapiClient {
         }
 
         List<SearchResult> searchResults = new ArrayList<>();
-        for (int i = 0; i < results.length(); i++) {
-            JSONObject item = results.getJSONObject(i);
-            JSONObject quote = item.optJSONObject("quote");
-            searchResults.add(new SearchResult(
-                    item.optString("symbol", null),
-                    item.optString("name", null),
-                    item.optString("assetType", null),
-                    item.optString("sector", null),
-                    quote == null ? null : optDouble(quote, "lastPrice"),
-                    item.optString("logoUrl", null)
-            ));
+        try {
+            for (int i = 0; i < results.length(); i++) {
+                JSONObject item = results.getJSONObject(i);
+                JSONObject quote = item.optJSONObject("quote");
+                searchResults.add(new SearchResult(
+                        item.optString("symbol", null),
+                        item.optString("name", null),
+                        item.optString("assetType", null),
+                        item.optString("sector", null),
+                        quote == null ? null : optDouble(quote, "lastPrice"),
+                        item.optString("logoUrl", null)
+                ));
+            }
+        } catch (JSONException e) {
+            throw new BrapiException("UNEXPECTED_PAYLOAD", 200,
+                    "Formato inesperado na busca de tickers: " + e.getMessage());
         }
         return searchResults;
     }
 
     // ---- parsing --------------------------------------------------------
 
+    /**
+     * Converte {@link JSONException}/{@link DateTimeParseException} em {@link
+     * BrapiException}: os chamadores (MarketService, AssetService) so tratam a
+     * excecao de dominio, entao uma mudanca de formato da API precisa chegar
+     * como falha de fonte de dados, nao como RuntimeException solta que derruba
+     * a tela.
+     */
     private AssetQuote toAssetQuote(String requestedTicker, JSONObject item) {
-        // "resolvedSymbol" é sempre lido do campo "symbol" da resposta
-        // (ticker resolvido) — nunca de "requestedSymbol" (SKILL.md seção 7).
-        String resolvedSymbol = item.getString("symbol");
-        boolean changed = item.optBoolean("changed", false);
-        JSONObject data = item.getJSONObject("data");
+        try {
+            // "resolvedSymbol" é sempre lido do campo "symbol" da resposta
+            // (ticker resolvido) — nunca de "requestedSymbol" (SKILL.md seção 7).
+            String resolvedSymbol = item.getString("symbol");
+            boolean changed = item.optBoolean("changed", false);
+            JSONObject data = item.getJSONObject("data");
 
-        return new AssetQuote(
-                requestedTicker,
-                resolvedSymbol,
-                changed,
-                optDouble(data, "regularMarketPrice"),
-                optDouble(data, "regularMarketChangePercent"),
-                optDouble(data, "regularMarketChange"),
-                optLong(data, "regularMarketVolume"),
-                optDouble(data, "marketCap"),
-                parseDateTime(data.optString("regularMarketTime", null))
-        );
+            return new AssetQuote(
+                    requestedTicker,
+                    resolvedSymbol,
+                    changed,
+                    optDouble(data, "regularMarketPrice"),
+                    optDouble(data, "regularMarketChangePercent"),
+                    optDouble(data, "regularMarketChange"),
+                    optLong(data, "regularMarketVolume"),
+                    optDouble(data, "marketCap"),
+                    parseDateTime(data.optString("regularMarketTime", null))
+            );
+        } catch (JSONException | DateTimeParseException e) {
+            throw new BrapiException("UNEXPECTED_PAYLOAD", 200,
+                    "Formato inesperado na cotacao de " + requestedTicker + ": " + e.getMessage());
+        }
     }
 
     private static Double optDouble(JSONObject json, String key) {
@@ -204,9 +250,26 @@ public class BrapiClientImpl implements BrapiClient {
         return java.time.OffsetDateTime.parse(iso).toLocalDateTime();
     }
 
+    /**
+     * Escapa um valor para uso como segmento de path. {@code URLEncoder} e
+     * feito para query string, onde espaco vira {@code "+"} — invalido num
+     * path, por isso a troca por {@code %20}.
+     */
+    private static String encodePathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
     // ---- HTTP -------------------------------------------------------------
 
     private JSONObject get(String path, Map<String, String> queryParams) throws BrapiException {
+        // Falha rapida e acionavel: sem token a brapi responde 401 com uma
+        // mensagem generica que nao diz ao usuario onde configurar.
+        if (token == null || token.isBlank()) {
+            throw new BrapiException("MISSING_TOKEN", 0,
+                    "Token da brapi.dev nao configurado — cadastre em Configuracoes > Chaves de API "
+                            + "ou defina a variavel de ambiente BRAPI_TOKEN.");
+        }
+
         StringBuilder query = new StringBuilder();
         for (Map.Entry<String, String> entry : queryParams.entrySet()) {
             if (!query.isEmpty()) {
@@ -220,6 +283,7 @@ public class BrapiClientImpl implements BrapiClient {
 
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .header("Authorization", "Bearer " + token)
+                .timeout(REQUEST_TIMEOUT)
                 .GET()
                 .build();
         try {

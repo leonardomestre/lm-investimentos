@@ -17,19 +17,26 @@ import com.investimento.app.data.model.IndicatorHistory;
 import com.investimento.app.data.model.QuoteHistory;
 import com.investimento.app.data.model.QuoteSource;
 import com.investimento.app.data.model.RateHistory;
+import com.investimento.app.dto.SyncEvent;
 import com.investimento.app.repository.IndicatorHistoryRepository;
 import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.repository.SettingRepository;
 import javafx.concurrent.Task;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
  * Implementação de {@link MarketService} — orquestra os 3 clientes de API
@@ -53,6 +60,18 @@ public class MarketServiceImpl implements MarketService {
      * macro/indicadores.
      */
     static final String SETTING_UPDATE_INTERVAL_MINUTES = "updateIntervalMinutes";
+
+    /**
+     * Mesma chave que {@code SettingsView.SETTING_PAUSE_WEEKENDS} (pacote
+     * {@code ui.screens}, inacessível daqui) — literal duplicado de propósito,
+     * mesmo padrão já usado por {@link #SETTING_UPDATE_INTERVAL_MINUTES}.
+     * "Pausar em fins de semana e feriados" — só cobre sábado/domingo
+     * ({@code LocalDate.getDayOfWeek()}); feriados móveis da B3 exigiriam um
+     * calendário externo, não implementado.
+     */
+    static final String SETTING_PAUSE_WEEKENDS = "updateSchedule.pauseWeekends";
+
+    private static final int MAX_RECENT_SYNCS = 10;
 
     private static final String[] INDICATOR_TICKERS = {"IBGE:IPCA", "BCB:SELICMETA"};
 
@@ -84,6 +103,14 @@ public class MarketServiceImpl implements MarketService {
     // rede (nao de comparar linhas de quote_history) - usada pela ATV-12.
     private final Map<Long, Double> dailyChanges = new ConcurrentHashMap<>();
 
+    // Ultima falha de rede (qualquer uma das 3 APIs) - limpa na proxima busca
+    // bem sucedida da MESMA operacao. So em memoria (reinicia com o app).
+    private volatile String lastFailureMessage;
+
+    // Ultimas tentativas de sincronizacao por fonte, mais recente primeiro -
+    // so em memoria, cap de MAX_RECENT_SYNCS.
+    private final Deque<SyncEvent> recentSyncs = new ConcurrentLinkedDeque<>();
+
     public MarketServiceImpl(HgBrasilClient hgBrasilClient,
                               BrapiClient brapiClient,
                               CoinGeckoClient coinGeckoClient,
@@ -110,6 +137,7 @@ public class MarketServiceImpl implements MarketService {
             macroSnapshotCache = snapshot;
             macroSnapshotFetchedAt = Instant.now();
             persistTodayRate(snapshot.todayRate());
+            clearFailure();
             return snapshot;
         } catch (HgBrasilException e) {
             logFailure("getMacroSnapshot", e);
@@ -118,6 +146,16 @@ public class MarketServiceImpl implements MarketService {
             // o placeholder, RT06/resiliencia da ATV-06).
             return macroSnapshotCache;
         }
+    }
+
+    @Override
+    public MacroSnapshot getCachedMacroSnapshot() {
+        return macroSnapshotCache;
+    }
+
+    @Override
+    public Map<String, List<IndicatorPoint>> getCachedIndicators() {
+        return indicatorsCache;
     }
 
     private void persistTodayRate(DailyRate rate) {
@@ -144,6 +182,7 @@ public class MarketServiceImpl implements MarketService {
             indicatorsCache = indicators;
             indicatorsFetchedAt = Instant.now();
             persistIndicators(indicators);
+            clearFailure();
             return indicators;
         } catch (HgBrasilException e) {
             logFailure("getIndicators", e);
@@ -174,6 +213,10 @@ public class MarketServiceImpl implements MarketService {
                 if (assets == null || assets.isEmpty()) {
                     return null;
                 }
+                if (isWeekendPauseActive()) {
+                    updateMessage("Atualização pausada — fim de semana (mercado fechado).");
+                    return null;
+                }
                 updateMessage("Atualizando cotações...");
                 updateProgress(0, 3);
                 updateHgBrasilAssets(assets);
@@ -186,6 +229,24 @@ public class MarketServiceImpl implements MarketService {
                 return null;
             }
         };
+    }
+
+    /**
+     * "Pausar em fins de semana e feriados" (settings, {@link
+     * #SETTING_PAUSE_WEEKENDS}, default {@code true} — mesmo default do
+     * template) — só cobre sábado/domingo; feriados da B3 não são cobertos
+     * (exigiria um calendário externo, não implementado).
+     */
+    private boolean isWeekendPauseActive() {
+        if (settingRepository == null) {
+            return false;
+        }
+        boolean pauseEnabled = Boolean.parseBoolean(settingRepository.get(SETTING_PAUSE_WEEKENDS, "true"));
+        if (!pauseEnabled) {
+            return false;
+        }
+        DayOfWeek day = LocalDate.now().getDayOfWeek();
+        return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
     }
 
     /**
@@ -202,6 +263,7 @@ public class MarketServiceImpl implements MarketService {
         }
         MacroSnapshot snapshot = getMacroSnapshot();
         if (snapshot == null) {
+            recordSync("HG Brasil", hgAssets.size(), false);
             return; // sem internet e sem cache anterior - nao ha o que atualizar agora.
         }
         LocalDate today = LocalDate.now();
@@ -220,6 +282,7 @@ public class MarketServiceImpl implements MarketService {
             dailyChanges.put(asset.getId(), currency.changePercent());
             lastQuoteFetch.put(asset.getId(), Instant.now());
         }
+        recordSync("HG Brasil", hgAssets.size(), true);
     }
 
     /**
@@ -275,8 +338,11 @@ public class MarketServiceImpl implements MarketService {
                 }
                 lastQuoteFetch.put(asset.getId(), Instant.now());
             }
+            clearFailure();
+            recordSync("brapi.dev", brapiAssets.size(), true);
         } catch (BrapiException e) {
             logFailure("updateQuotes(BRAPI)", e);
+            recordSync("brapi.dev", brapiAssets.size(), false);
             // Mantem o ultimo preco conhecido no banco - nao propaga a excecao.
         }
     }
@@ -314,8 +380,11 @@ public class MarketServiceImpl implements MarketService {
                 }
                 lastQuoteFetch.put(asset.getId(), Instant.now());
             }
+            clearFailure();
+            recordSync("CoinGecko", cryptoAssets.size(), true);
         } catch (CoinGeckoException e) {
             logFailure("updateQuotes(COINGECKO)", e);
+            recordSync("CoinGecko", cryptoAssets.size(), false);
         }
     }
 
@@ -341,22 +410,30 @@ public class MarketServiceImpl implements MarketService {
         };
     }
 
+    /**
+     * O seed monta a lista inteira e grava de uma vez ({@code upsertAll}, uma
+     * transacao so). Um upsert por ponto seguraria a conexao unica do app por
+     * milhares de transacoes seguidas — {@code range=max} traz ~6,5 mil pontos
+     * para um ativo antigo — congelando a UI, que compartilha essa conexao.
+     */
     private void seedFromBrapi(Asset asset) {
         try {
             List<com.investimento.app.api.brapi.model.HistoricalPoint> history =
                     brapiClient.getHistory(asset.getSourceIdentifier(), "max", "1d");
+            List<QuoteHistory> quotes = new ArrayList<>();
             for (com.investimento.app.api.brapi.model.HistoricalPoint point : history) {
                 Double price = point.adjustedClose() != null ? point.adjustedClose() : point.close();
                 if (price == null) {
                     continue;
                 }
-                quoteHistoryRepository.upsert(QuoteHistory.builder()
+                quotes.add(QuoteHistory.builder()
                         .assetId(asset.getId())
                         .date(point.date())
                         .price(price)
                         .source(QuoteSource.BRAPI)
                         .build());
             }
+            quoteHistoryRepository.upsertAll(deduplicateByDate(quotes));
         } catch (BrapiException e) {
             logFailure("seedInitialHistory(BRAPI, " + asset.getSourceIdentifier() + ")", e);
         }
@@ -366,20 +443,37 @@ public class MarketServiceImpl implements MarketService {
         try {
             List<com.investimento.app.api.coingecko.model.HistoricalPoint> history =
                     coinGeckoClient.getHistory(asset.getSourceIdentifier(), 365);
+            List<QuoteHistory> quotes = new ArrayList<>();
             for (com.investimento.app.api.coingecko.model.HistoricalPoint point : history) {
                 if (point.price() == null) {
                     continue;
                 }
-                quoteHistoryRepository.upsert(QuoteHistory.builder()
+                quotes.add(QuoteHistory.builder()
                         .assetId(asset.getId())
                         .date(point.date())
                         .price(point.price())
                         .source(QuoteSource.COINGECKO)
                         .build());
             }
+            quoteHistoryRepository.upsertAll(deduplicateByDate(quotes));
         } catch (CoinGeckoException e) {
             logFailure("seedInitialHistory(COINGECKO, " + asset.getSourceIdentifier() + ")", e);
         }
+    }
+
+    /**
+     * Mantem so o ultimo ponto de cada data. Necessario porque
+     * {@code ON CONFLICT} resolve conflito com linhas <b>ja gravadas</b>, nao
+     * entre linhas do mesmo lote — e a CoinGecko devolve granularidade horaria
+     * quando {@code days} e grande (varios pontos por dia), o que faria o
+     * batch inteiro falhar com {@code UNIQUE constraint failed}.
+     */
+    private static List<QuoteHistory> deduplicateByDate(List<QuoteHistory> quotes) {
+        Map<LocalDate, QuoteHistory> byDate = new LinkedHashMap<>();
+        for (QuoteHistory quote : quotes) {
+            byDate.put(quote.getDate(), quote);
+        }
+        return new ArrayList<>(byDate.values());
     }
 
     @Override
@@ -435,9 +529,31 @@ public class MarketServiceImpl implements MarketService {
         return fetchedAt != null && Duration.between(fetchedAt, Instant.now()).compareTo(ttl) < 0;
     }
 
-    private static void logFailure(String operation, Exception e) {
+    private void logFailure(String operation, Exception e) {
         // Nao deixa a excecao subir e quebrar a tela (resiliencia, ATV-06) -
         // so loga e deixa quem chamou usar o ultimo valor conhecido.
         System.err.println("[MarketService] Falha em " + operation + ": " + e.getMessage());
+        lastFailureMessage = operation + ": " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+    }
+
+    private void clearFailure() {
+        lastFailureMessage = null;
+    }
+
+    @Override
+    public Optional<String> getLastFailure() {
+        return Optional.ofNullable(lastFailureMessage);
+    }
+
+    private void recordSync(String source, int assetCount, boolean success) {
+        recentSyncs.addFirst(new SyncEvent(Instant.now(), source, assetCount, success));
+        while (recentSyncs.size() > MAX_RECENT_SYNCS) {
+            recentSyncs.removeLast();
+        }
+    }
+
+    @Override
+    public List<SyncEvent> getRecentSyncs() {
+        return new ArrayList<>(recentSyncs);
     }
 }

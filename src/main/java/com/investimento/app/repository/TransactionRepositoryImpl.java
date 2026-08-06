@@ -35,9 +35,18 @@ public class TransactionRepositoryImpl implements TransactionRepository {
         }
     }
 
+    /**
+     * O desempate por {@code id} nao e cosmetico: {@code PositionService}
+     * percorre esta lista aplicando custo medio, e o resultado de uma compra e
+     * uma venda no MESMO dia depende da ordem em que elas aparecem. Sem o
+     * segundo criterio, a ordem entre linhas de data igual e a que o SQLite
+     * resolver, podendo mudar de execucao para execucao (e com ela o preco
+     * medio e o ganho apurado). {@code id} e crescente por ordem de cadastro,
+     * que e o desempate mais proximo da intencao do usuario.
+     */
     @Override
     public List<Transaction> listAll() {
-        String sql = "SELECT * FROM transactions ORDER BY date";
+        String sql = "SELECT * FROM transactions ORDER BY date, id";
         List<Transaction> result = new ArrayList<>();
         try (PreparedStatement ps = connection.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -52,7 +61,7 @@ public class TransactionRepositoryImpl implements TransactionRepository {
 
     @Override
     public List<Transaction> listByAsset(long assetId) {
-        String sql = "SELECT * FROM transactions WHERE asset_id = ? ORDER BY date";
+        String sql = "SELECT * FROM transactions WHERE asset_id = ? ORDER BY date, id";
         List<Transaction> result = new ArrayList<>();
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setLong(1, assetId);
@@ -69,7 +78,7 @@ public class TransactionRepositoryImpl implements TransactionRepository {
 
     @Override
     public List<Transaction> listByPeriod(LocalDate start, LocalDate end) {
-        String sql = "SELECT * FROM transactions WHERE date BETWEEN ? AND ? ORDER BY date";
+        String sql = "SELECT * FROM transactions WHERE date BETWEEN ? AND ? ORDER BY date, id";
         List<Transaction> result = new ArrayList<>();
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, start.toString());

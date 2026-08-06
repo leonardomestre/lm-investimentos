@@ -109,7 +109,7 @@ public final class IncomeTaxServiceManualTest {
 
         // ================= Cenário 3: FII, vendas 500, ganho 100 -> SEMPRE tributado, mesmo venda pequena =================
         System.out.println();
-        System.out.println("=== Cenário 3: FII, vendas R$500/mês, ganho R$100 -> sempre tributado, taxDue=15 ===");
+        System.out.println("=== Cenário 3: FII, vendas R$500/mês, ganho R$100 -> sempre tributado, taxDue=20 (alíquota de FII é 20%) ===");
         Asset fii = newAsset(assetRepository, AssetType.FII, Category.FIIS, "FIIX11");
         buyAndSell(transactionRepository, fii,
                 YearMonth.of(2026, 3), 10, 40.0, 50.0); // totalSold=500, gain=100
@@ -118,7 +118,7 @@ public final class IncomeTaxServiceManualTest {
         check(close(assessment3.totalSold(), 500), "totalSold esperado 500, veio " + assessment3.totalSold());
         check(close(assessment3.grossGain(), 100), "grossGain esperado 100, veio " + assessment3.grossGain());
         check(!assessment3.exempt(), "FII nunca é isento (exempt deveria ser false mesmo com venda pequena)");
-        check(close(assessment3.taxDue(), 15), "cenário 3 taxDue esperado 15 (15% de 100), veio " + assessment3.taxDue());
+        check(close(assessment3.taxDue(), 20), "cenário 3 taxDue esperado 20 (20% de 100 — FII, não 15%), veio " + assessment3.taxDue());
 
         // ================= Cenário 4: Cripto, vendas 40.000, ganho 2.000 -> tributado (ultrapassou os 35k) =================
         System.out.println();
@@ -167,9 +167,9 @@ public final class IncomeTaxServiceManualTest {
         check(!summary.assessmentsByCategory().containsKey(Category.FOREX),
                 "FOREX não deveria aparecer no AnnualIncomeTaxSummary (regra não definida, ver ATV-11)");
         double expectedTotalTaxDue = 0 /* cenário 1, isento */ + 450 /* cenário 2 */
-                + 15 /* cenário 3 */ + 0 /* cenário 5, prejuízo */ + 300 /* cenário 4 */;
+                + 20 /* cenário 3, FII a 20% */ + 0 /* cenário 5, prejuízo */ + 300 /* cenário 4 */;
         check(close(summary.totalTaxDue(), expectedTotalTaxDue),
-                "totalTaxDue esperado " + expectedTotalTaxDue + " (450+15+300), veio " + summary.totalTaxDue());
+                "totalTaxDue esperado " + expectedTotalTaxDue + " (450+20+300), veio " + summary.totalTaxDue());
 
         // ================= Cenário 8: getAccumulatedLoss soma prejuízo de meses ANTERIORES =================
         System.out.println();
@@ -255,6 +255,17 @@ public final class IncomeTaxServiceManualTest {
             return Map.of();
         }
 
+        // Fake sem cache nem rede: a versao cacheada e a mesma resposta fixa.
+        @Override
+        public MacroSnapshot getCachedMacroSnapshot() {
+            return getMacroSnapshot();
+        }
+
+        @Override
+        public Map<String, List<IndicatorPoint>> getCachedIndicators() {
+            return getIndicators();
+        }
+
         @Override
         public Task<Void> updateQuotes(List<Asset> assets) {
             return new Task<>() {
@@ -278,6 +289,16 @@ public final class IncomeTaxServiceManualTest {
         @Override
         public Map<Long, Double> getDailyChanges(List<Asset> assets) {
             return Map.of();
+        }
+
+        @Override
+        public java.util.Optional<String> getLastFailure() {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public List<com.investimento.app.dto.SyncEvent> getRecentSyncs() {
+            return List.of();
         }
     }
 }
