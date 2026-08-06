@@ -59,7 +59,7 @@ public class Shell extends BorderPane {
                 portfolioSnapshotRepository, rateHistoryRepository, this::select));
         views.put(Screen.STOCKS_FIIS, new StocksFiisView(positionService, assetRepository, quoteHistoryRepository,
                 distributionRepository, marketService));
-        views.put(Screen.FIXED_INCOME, new FixedIncomeView());
+        views.put(Screen.FIXED_INCOME, new FixedIncomeView(positionService, marketService));
         views.put(Screen.FOREX_CRYPTO, new ForexCryptoView());
         views.put(Screen.REGISTRATION, new RegistrationView(assetService, transactionService, brapiClient, coinGeckoClient));
         views.put(Screen.TAX_HISTORY, new TaxHistoryView());

@@ -6,8 +6,10 @@ import com.investimento.app.data.model.Asset;
 import com.investimento.app.data.model.IndicatorHistory;
 import com.investimento.app.data.model.OperationType;
 import com.investimento.app.data.model.QuoteHistory;
+import com.investimento.app.data.model.Category;
 import com.investimento.app.data.model.Transaction;
 import com.investimento.app.dto.AssetDTO;
+import com.investimento.app.dto.FixedIncomeProjectionPoint;
 import com.investimento.app.dto.PortfolioSummary;
 import com.investimento.app.dto.Position;
 import com.investimento.app.dto.RealizedSale;
@@ -112,6 +114,97 @@ public class PositionServiceImpl implements PositionService {
     private Asset findAssetOrThrow(long assetId) {
         return assetRepository.findById(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("Ativo não encontrado: " + assetId));
+    }
+
+    // ---- Renda fixa: valor líquido (IR regressivo) e projeção (ATV-15) ----
+
+    @Override
+    public double calculateFixedIncomeNetValue(long assetId) {
+        Asset asset = findFixedIncomeAssetOrThrow(assetId);
+        Position position = calculatePosition(assetId);
+        if (asset.getInvestmentDate() == null) {
+            // Sem data de aplicacao nao ha como saber o prazo decorrido -
+            // devolve o bruto (mesma resiliencia da ATV-10/ATV-11: nunca
+            // lanca excecao por dado ausente, so nao aplica desconto).
+            return position.currentValue();
+        }
+        long elapsedDays = Math.max(0, ChronoUnit.DAYS.between(asset.getInvestmentDate(), LocalDate.now()));
+        return netValue(position.investedValue(), position.currentValue(), elapsedDays);
+    }
+
+    @Override
+    public List<FixedIncomeProjectionPoint> calculateFixedIncomeProjection(long assetId) {
+        Asset asset = findFixedIncomeAssetOrThrow(assetId);
+        LocalDate start = asset.getInvestmentDate();
+        LocalDate end = asset.getMaturityDate();
+        if (start == null || end == null || !end.isAfter(start)) {
+            return List.of();
+        }
+
+        List<Transaction> transactions = transactionRepository.listByAsset(assetId);
+        double initialInvestedAmount = transactions.stream()
+                .filter(t -> t.getOperationType() == OperationType.BUY)
+                .mapToDouble(t -> (t.getUnitPrice() * t.getQuantity()) + t.getFees())
+                .sum();
+        double equivalentAnnualRate = equivalentAnnualRate(asset);
+
+        List<FixedIncomeProjectionPoint> points = new ArrayList<>();
+        LocalDate cursor = start;
+        while (cursor.isBefore(end)) {
+            points.add(projectionPoint(cursor, start, initialInvestedAmount, equivalentAnnualRate));
+            cursor = cursor.plusMonths(1);
+        }
+        // Garante que o ultimo ponto seja exatamente maturityDate - o loop
+        // acima para antes de ultrapassar `end`, entao o ultimo `cursor` pode
+        // ser ate 1 mes antes do vencimento (armadilha/criterio de aceite:
+        // "gráfico de projeção termina na maturityDate, não continua além dela").
+        points.add(projectionPoint(end, start, initialInvestedAmount, equivalentAnnualRate));
+        return points;
+    }
+
+    private FixedIncomeProjectionPoint projectionPoint(LocalDate date, LocalDate start,
+                                                         double initialInvestedAmount, double equivalentAnnualRate) {
+        long elapsedDays = ChronoUnit.DAYS.between(start, date);
+        double elapsedYears = elapsedDays / 365.0;
+        double grossValue = initialInvestedAmount * Math.pow(1 + equivalentAnnualRate, elapsedYears);
+        double netValue = netValue(initialInvestedAmount, grossValue, elapsedDays);
+        return new FixedIncomeProjectionPoint(date, grossValue, netValue);
+    }
+
+    /**
+     * Aplica a tabela de IR regressivo (ATV-15) sobre o rendimento ({@code
+     * currentValue - investedValue}), nunca sobre o valor total. Se o
+     * rendimento for negativo ou nulo, devolve o valor bruto (não há imposto
+     * a aplicar) — garante o critério de aceite "valor líquido é sempre {@code
+     * <=} valor bruto projetado".
+     */
+    private double netValue(double investedValue, double currentValue, long elapsedDays) {
+        double grossGain = currentValue - investedValue;
+        if (grossGain <= 0) {
+            return currentValue;
+        }
+        double taxRate = regressiveIncomeTaxRate(elapsedDays);
+        return investedValue + grossGain * (1 - taxRate);
+    }
+
+    /** Tabela de IR regressivo para renda fixa (ATV-15) — fração decimal. */
+    private double regressiveIncomeTaxRate(long elapsedDays) {
+        if (elapsedDays <= 180) {
+            return 0.225;
+        } else if (elapsedDays <= 360) {
+            return 0.20;
+        } else if (elapsedDays <= 720) {
+            return 0.175;
+        }
+        return 0.15;
+    }
+
+    private Asset findFixedIncomeAssetOrThrow(long assetId) {
+        Asset asset = findAssetOrThrow(assetId);
+        if (asset.getCategory() != Category.FIXED_INCOME) {
+            throw new IllegalArgumentException("Ativo não é de renda fixa: " + assetId);
+        }
+        return asset;
     }
 
     // ---- Custo médio ponderado (compartilhado entre calculatePosition e calculateRealizedSales) ----

@@ -1,5 +1,6 @@
 package com.investimento.app.service;
 
+import com.investimento.app.dto.FixedIncomeProjectionPoint;
 import com.investimento.app.dto.PortfolioSummary;
 import com.investimento.app.dto.Position;
 import com.investimento.app.dto.RealizedSale;
@@ -51,4 +52,40 @@ public interface PositionService {
      * própria.
      */
     List<RealizedSale> calculateRealizedSales(long assetId);
+
+    /**
+     * Valor líquido projetado de um ativo de renda fixa (categoria {@link
+     * com.investimento.app.data.model.Category#FIXED_INCOME}), aplicando IR
+     * regressivo (ATV-15) sobre o rendimento (valor atual projetado − valor
+     * investido) — nunca sobre o valor total. O prazo usado para escolher a
+     * alíquota é {@code hoje - investmentDate} (não {@code maturityDate -
+     * investmentDate}): o IR real só é cobrado no resgate, então este número é
+     * sempre uma estimativa "se eu resgatasse hoje", conforme a armadilha
+     * documentada na atividade. Nunca devolve um valor maior que o valor
+     * bruto ({@link Position#currentValue()}) — se o rendimento for negativo
+     * ou nulo, não há imposto a aplicar.
+     *
+     * @throws IllegalArgumentException se o ativo não existir ou não for
+     *                                   {@code FIXED_INCOME}
+     */
+    double calculateFixedIncomeNetValue(long assetId);
+
+    /**
+     * Projeção mensal (bruto e líquido) de um ativo de renda fixa, do primeiro
+     * dia após {@code investmentDate} até {@code maturityDate} (inclusive) —
+     * usada pelo gráfico de projeção da ATV-15. A mesma fórmula de juros
+     * compostos da ATV-10 ({@code initialInvestedAmount * (1 +
+     * equivalentAnnualRate)^years}) é aplicada em cada ponto; o líquido de
+     * cada ponto usa a alíquota regressiva referente ao prazo decorrido
+     * *naquele* ponto (não ao prazo de hoje). O último ponto da lista é
+     * sempre exatamente {@code maturityDate} (nunca um ponto além dela, nem
+     * um mês antes por arredondamento).
+     *
+     * @return lista vazia se o ativo não tiver {@code investmentDate}/{@code
+     *         maturityDate} definidos, ou se {@code maturityDate} não for
+     *         posterior a {@code investmentDate}
+     * @throws IllegalArgumentException se o ativo não existir ou não for
+     *                                   {@code FIXED_INCOME}
+     */
+    List<FixedIncomeProjectionPoint> calculateFixedIncomeProjection(long assetId);
 }
