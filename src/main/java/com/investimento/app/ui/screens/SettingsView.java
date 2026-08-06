@@ -7,6 +7,8 @@ import com.investimento.app.dto.SyncEvent;
 import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.BackupService;
 import com.investimento.app.service.MarketService;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.geometry.HPos;
@@ -80,8 +82,13 @@ public class SettingsView implements ScreenView {
     // limitacao ja registrada para LCI/LCA na ATV-15. Se uma atividade futura
     // precisar que esses valores realmente afetem outra tela, o dado ja esta
     // disponivel em settings, so falta o consumidor.
-    static final String SETTING_PRIMARY_CURRENCY = "preferences.primaryCurrency";
-    static final String SETTING_THEME = "preferences.theme";
+    // Publicas (as demais desta tela sao package-private) porque o App
+    // precisa ler as duas ANTES de montar o Shell: o tema define os
+    // stylesheets da Scene e a moeda define a formatacao de todas as telas —
+    // as duas valem no primeiro frame, nao so quando o usuario abre
+    // Configuracoes.
+    public static final String SETTING_PRIMARY_CURRENCY = "preferences.primaryCurrency";
+    public static final String SETTING_THEME = "preferences.theme";
     static final String SETTING_DEFAULT_CHART_PERIOD = "preferences.defaultChartPeriod";
     static final String SETTING_CRYPTO_DECIMALS = "preferences.cryptoDecimals";
     static final String SETTING_HIDE_DASHBOARD_VALUES = "preferences.hideDashboardValues";
@@ -715,7 +722,8 @@ public class SettingsView implements ScreenView {
         updateIntervalErrorLabel.setManaged(false);
 
         primaryCurrencyCombo.setValue(settingRepository.get(SETTING_PRIMARY_CURRENCY, "Real (BRL)"));
-        themeToggle.setSecondSelected("Escuro".equals(settingRepository.get(SETTING_THEME, "Claro")));
+        themeToggle.setSecondSelected(
+                ThemeManager.fromSettingValue(settingRepository.get(SETTING_THEME, null)) == Theme.DARK);
         defaultChartPeriodCombo.setValue(settingRepository.get(SETTING_DEFAULT_CHART_PERIOD, "12 meses"));
         cryptoDecimalsCombo.setValue(parseIntOrDefault(settingRepository.get(SETTING_CRYPTO_DECIMALS, "6"), 6));
         hideDashboardValuesToggle.setOn(Boolean.parseBoolean(settingRepository.get(SETTING_HIDE_DASHBOARD_VALUES, "false")));
@@ -758,8 +766,9 @@ public class SettingsView implements ScreenView {
         settingRepository.save(SETTING_BRAPI_TOKEN, safeTrim(brapiTokenField.getValue()));
         settingRepository.save(SETTING_UPDATE_INTERVAL_MINUTES, rawInterval);
 
+        Theme theme = themeToggle.isSecondSelected() ? Theme.DARK : Theme.LIGHT;
         settingRepository.save(SETTING_PRIMARY_CURRENCY, primaryCurrencyCombo.getValue());
-        settingRepository.save(SETTING_THEME, themeToggle.isSecondSelected() ? "Escuro" : "Claro");
+        settingRepository.save(SETTING_THEME, ThemeManager.toSettingValue(theme));
         settingRepository.save(SETTING_DEFAULT_CHART_PERIOD, defaultChartPeriodCombo.getValue());
         settingRepository.save(SETTING_CRYPTO_DECIMALS, String.valueOf(cryptoDecimalsCombo.getValue()));
         settingRepository.save(SETTING_HIDE_DASHBOARD_VALUES, String.valueOf(hideDashboardValuesToggle.isOn()));
@@ -768,8 +777,15 @@ public class SettingsView implements ScreenView {
         settingRepository.save(SETTING_PAUSE_WEEKENDS, String.valueOf(pauseWeekendsToggle.isOn()));
         settingRepository.save(SETTING_ALERT_ON_FAILURE, String.valueOf(alertOnFailureToggle.isOn()));
 
-        statusLabel.setText("Configurações salvas. O intervalo de atualização já vale imediatamente; "
-                + "novas chaves de API só valem após reiniciar o aplicativo.");
+        // Tema vale na hora: ThemeManager so troca a lista de stylesheets da
+        // Scene, sem reconstruir tela nenhuma. Os graficos (Canvas, que nao
+        // le CSS) so assumem a cor nova quando o usuario volta para a tela
+        // deles — o Shell chama onShow()/refresh() a cada navegacao, e esta
+        // tela nao tem grafico. Ver ThemeManager.
+        ThemeManager.apply(theme);
+
+        statusLabel.setText("Configurações salvas. O tema e o intervalo de atualização já valem "
+                + "imediatamente; novas chaves de API só valem após reiniciar o aplicativo.");
     }
 
     private static boolean isValidPositiveInteger(String text) {

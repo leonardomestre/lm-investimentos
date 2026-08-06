@@ -7,6 +7,8 @@ import com.investimento.app.dto.FixedIncomeProjectionPoint;
 import com.investimento.app.dto.Position;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -58,14 +60,15 @@ import java.util.TreeMap;
  */
 public class FixedIncomeView implements ScreenView {
 
-    // Cores duplicadas de theme.css/paleta.md — Canvas desenha imperativamente
-    // e não lê variável -fx-color-* do CSS (mesma nota das ATV-12/14).
-    private static final Color COLOR_CHART_GRID = Color.web("#eeebe5");
-    private static final Color COLOR_CHART_AXIS_TEXT = Color.web("#a2a8ab");
-    private static final Color COLOR_GROSS_LINE = Color.web("#2f6f5e");
-    private static final Color COLOR_GROSS_AREA = Color.web("#3d9c78", 0.1);
-    private static final Color COLOR_NET_LINE = Color.web("#c9a227");
-    private static final Color COLOR_TODAY_LINE = Color.web("#c3bfb6");
+    /**
+     * Cores de grafico do tema ativo (ver {@link ThemeManager}) — linha do
+     * valor bruto em {@code accentStrong}, linha do liquido em
+     * {@code neutralWarn}, marcador vertical de "hoje" em
+     * {@code chartLineSecondary}.
+     */
+    private static Theme theme() {
+        return ThemeManager.current();
+    }
 
     private static final Locale PT_BR = new Locale("pt", "BR");
     private static final String[] MONTH_ABBR =
@@ -385,10 +388,10 @@ public class FixedIncomeView implements ScreenView {
         }
 
         // 1. grade horizontal + labels eixo Y
-        gc.setStroke(COLOR_CHART_GRID);
+        gc.setStroke(theme().chartGrid());
         gc.setLineWidth(1);
         gc.setFont(Font.font("IBM Plex Mono", 10));
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int gridLines = 5;
         for (int i = 0; i < gridLines; i++) {
             double y = topPad + plotHeight * i / (double) (gridLines - 1);
@@ -406,40 +409,40 @@ public class FixedIncomeView implements ScreenView {
         areaY[n] = topPad + plotHeight;
         areaX[n + 1] = xs[0];
         areaY[n + 1] = topPad + plotHeight;
-        gc.setFill(COLOR_GROSS_AREA);
+        gc.setFill(theme().chartArea());
         gc.fillPolygon(areaX, areaY, n + 2);
 
         // 3. linha vertical "hoje", so se o titulo ainda nao venceu
         LocalDate today = LocalDate.now();
         if (!today.isBefore(start) && !today.isAfter(end)) {
             double todayX = leftPad + plotWidth * ChronoUnit.DAYS.between(start, today) / (double) totalDays;
-            gc.setStroke(COLOR_TODAY_LINE);
+            gc.setStroke(theme().chartLineSecondary());
             gc.setLineWidth(1.5);
             gc.strokeLine(todayX, topPad, todayX, topPad + plotHeight);
-            gc.setFill(COLOR_CHART_AXIS_TEXT);
+            gc.setFill(theme().chartAxisText());
             gc.fillText("hoje", todayX - 12, topPad - 6);
         }
 
         // 4. linha liquida (tracejada)
-        gc.setStroke(COLOR_NET_LINE);
+        gc.setStroke(theme().neutralWarn());
         gc.setLineWidth(2);
         gc.setLineDashes(7, 5);
         gc.strokePolyline(xs, netYs, n);
         gc.setLineDashes((double[]) null);
 
         // 5. linha bruta (solida)
-        gc.setStroke(COLOR_GROSS_LINE);
+        gc.setStroke(theme().accentStrong());
         gc.setLineWidth(2.5);
         gc.strokePolyline(xs, grossYs, n);
 
         // 6. pontos finais destacados
-        gc.setFill(COLOR_GROSS_LINE);
+        gc.setFill(theme().accentStrong());
         gc.fillOval(xs[n - 1] - 4.5, grossYs[n - 1] - 4.5, 9, 9);
-        gc.setFill(COLOR_NET_LINE);
+        gc.setFill(theme().neutralWarn());
         gc.fillOval(xs[n - 1] - 4.5, netYs[n - 1] - 4.5, 9, 9);
 
         // 7. labels eixo X (inicio, ~1/4, meio, ~3/4, fim)
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int[] labelIdx = n <= 5 ? intRange(n) : new int[]{0, n / 4, n / 2, (3 * n) / 4, n - 1};
         for (int idx : labelIdx) {
             LocalDate d = points.get(idx).date();
@@ -449,8 +452,8 @@ public class FixedIncomeView implements ScreenView {
     }
 
     private HBox buildProjectionLegend(FixedIncomeProjectionPoint atMaturity) {
-        HBox item1 = legendItem("Valor bruto projetado", COLOR_GROSS_LINE);
-        HBox item2 = legendItem("Valor líquido (IR regressivo)", COLOR_NET_LINE);
+        HBox item1 = legendItem("Valor bruto projetado", theme().accentStrong());
+        HBox item2 = legendItem("Valor líquido (IR regressivo)", theme().neutralWarn());
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
@@ -698,7 +701,7 @@ public class FixedIncomeView implements ScreenView {
         Region fill = new Region();
         fill.setPrefHeight(18);
         fill.setStyle("-fx-background-radius: 4; -fx-background-color: "
-                + (highlight ? toHex(COLOR_NET_LINE) : toHex(COLOR_GROSS_LINE)) + ";");
+                + (highlight ? toHex(theme().neutralWarn()) : toHex(theme().accentStrong())) + ";");
         double widthFraction = maxValue > 0 ? Math.min(1.0, value / maxValue) : 0;
         fill.prefWidthProperty().bind(track.widthProperty().multiply(widthFraction));
         // StackPane estica os filhos ao tamanho maximo por padrao - sem isto a

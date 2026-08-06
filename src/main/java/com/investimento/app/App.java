@@ -38,6 +38,9 @@ import com.investimento.app.service.TransactionService;
 import com.investimento.app.service.TransactionServiceImpl;
 import com.investimento.app.ui.Screen;
 import com.investimento.app.ui.Shell;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
+import com.investimento.app.ui.screens.SettingsView;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.text.Font;
@@ -89,7 +92,14 @@ public class App extends Application {
         Shell shell = buildShell(connection, Screen.DASHBOARD, () -> rebuildShell(stage));
 
         Scene scene = new Scene(shell, 1440, 900);
-        scene.getStylesheets().add(getClass().getResource("/theme.css").toExternalForm());
+        // Tema lido de settings ANTES do primeiro show: abrir sempre no claro
+        // e so depois trocar faria a janela piscar em branco para quem usa o
+        // tema escuro. ThemeManager e quem monta a lista de stylesheets
+        // (theme.css + theme-dark.css opcional) — nao adicionar theme.css
+        // aqui por fora, senao ele entra duplicado.
+        Theme theme = ThemeManager.fromSettingValue(
+                new SettingRepositoryImpl(connection).get(SettingsView.SETTING_THEME, null));
+        ThemeManager.install(scene, theme);
 
         stage.setTitle("Carteira — LM Investimentos");
         stage.setScene(scene);

@@ -688,7 +688,9 @@ public class RegistrationView implements ScreenView {
     private HBox buildAssetRow(AssetDTO asset) {
         Label icon = new Label(categoryAbbreviation(asset.category()));
         icon.getStyleClass().add("asset-row-icon");
-        icon.setStyle("-fx-text-fill: white; -fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 10px;");
+        // Classe de CSS em vez de -fx-text-fill:white inline: o fundo do
+        // icone e -fx-color-fill-inverse, que inverte no tema escuro.
+        icon.getStyleClass().add("asset-row-icon-text");
         StackPane iconStack = new StackPane(icon);
         iconStack.getStyleClass().add("asset-row-icon");
 

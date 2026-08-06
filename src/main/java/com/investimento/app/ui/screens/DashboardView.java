@@ -17,6 +17,8 @@ import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
 import com.investimento.app.ui.Screen;
 import javafx.beans.binding.Bindings;
 import javafx.concurrent.Task;
@@ -68,18 +70,15 @@ import java.util.function.Consumer;
  */
 public class DashboardView implements ScreenView {
 
-    // Cores duplicadas de theme.css/paleta.md — necessario porque Canvas
-    // desenha imperativamente e nao consegue ler variavel -fx-color-* do CSS.
-    private static final Color COLOR_STOCKS = Color.web("#2f6f5e");
-    private static final Color COLOR_FIIS = Color.web("#5cae92");
-    private static final Color COLOR_FIXED_INCOME = Color.web("#14181a");
-    private static final Color COLOR_CRYPTO = Color.web("#c9a227");
-    private static final Color COLOR_FOREX = Color.web("#b3402f");
-    private static final Color COLOR_CHART_GRID = Color.web("#eeebe5");
-    private static final Color COLOR_CHART_AXIS_TEXT = Color.web("#a2a8ab");
-    private static final Color COLOR_CHART_LINE_PRIMARY = Color.web("#2f6f5e");
-    private static final Color COLOR_CHART_LINE_SECONDARY = Color.web("#c3bfb6");
-    private static final Color COLOR_CHART_AREA = Color.web("#3d9c78", 0.1);
+    /**
+     * Cores de grafico do tema ativo. Antes eram constantes {@code Color.web}
+     * fixas aqui — viraram consulta ao {@link ThemeManager} para o tema
+     * escuro poder trocá-las. Lida no momento do desenho (nao guardada em
+     * campo), entao o proximo {@code refresh()} ja pinta com o tema novo.
+     */
+    private static Theme theme() {
+        return ThemeManager.current();
+    }
 
     private static final Locale PT_BR = new Locale("pt", "BR");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -540,8 +539,8 @@ public class DashboardView implements ScreenView {
     }
 
     private HBox buildLineChartLegend() {
-        return new HBox(18, legendItem("Patrimônio", COLOR_CHART_LINE_PRIMARY),
-                legendItem("CDI acumulado", COLOR_CHART_LINE_SECONDARY));
+        return new HBox(18, legendItem("Patrimônio", theme().chartLinePrimary()),
+                legendItem("CDI acumulado", theme().chartLineSecondary()));
     }
 
     private HBox legendItem(String text, Color color) {
@@ -614,10 +613,10 @@ public class DashboardView implements ScreenView {
         }
 
         // 1. grade horizontal + 2. labels eixo Y
-        gc.setStroke(COLOR_CHART_GRID);
+        gc.setStroke(theme().chartGrid());
         gc.setLineWidth(1);
         gc.setFont(Font.font("IBM Plex Mono", 10));
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int gridLines = 5;
         for (int i = 0; i < gridLines; i++) {
             double y = topPad + plotHeight * i / (double) (gridLines - 1);
@@ -635,27 +634,27 @@ public class DashboardView implements ScreenView {
         areaY[n] = topPad + plotHeight;
         areaX[n + 1] = xs[0];
         areaY[n + 1] = topPad + plotHeight;
-        gc.setFill(COLOR_CHART_AREA);
+        gc.setFill(theme().chartArea());
         gc.fillPolygon(areaX, areaY, n + 2);
 
         // 5. linha secundaria (CDI acumulado, tracejada)
-        gc.setStroke(COLOR_CHART_LINE_SECONDARY);
+        gc.setStroke(theme().chartLineSecondary());
         gc.setLineWidth(2);
         gc.setLineDashes(5, 5);
         gc.strokePolyline(xs, ysCdi, n);
         gc.setLineDashes((double[]) null);
 
         // 4. linha principal
-        gc.setStroke(COLOR_CHART_LINE_PRIMARY);
+        gc.setStroke(theme().chartLinePrimary());
         gc.setLineWidth(2.5);
         gc.strokePolyline(xs, ysMain, n);
 
         // 6. ponto final destacado
-        gc.setFill(COLOR_CHART_LINE_PRIMARY);
+        gc.setFill(theme().chartLinePrimary());
         gc.fillOval(xs[n - 1] - 4.5, ysMain[n - 1] - 4.5, 9, 9);
 
         // 7. labels eixo X (inicio, ~1/4, meio, ~3/4, fim)
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int[] labelIdx = n <= 5
                 ? intRange(n)
                 : new int[]{0, n / 4, n / 2, (3 * n) / 4, n - 1};
@@ -1075,7 +1074,10 @@ public class DashboardView implements ScreenView {
         row.setOnMouseClicked(e -> onNavigate.accept(categoryScreen(position.asset().category())));
 
         Label arrow = new Label(gain ? "↑" : "↓");
-        arrow.setStyle("-fx-text-fill: white; -fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 11px;");
+        // Classe de CSS em vez de -fx-text-fill:white inline: no tema escuro
+        // o fundo gain/loss do badge e claro, e a seta precisa inverter junto
+        // (token -fx-color-on-gain/-on-loss).
+        arrow.getStyleClass().add("highlight-badge-glyph");
         StackPane badge = new StackPane(arrow);
         badge.getStyleClass().add(gain ? "highlight-badge-gain" : "highlight-badge-loss");
 
@@ -1170,11 +1172,11 @@ public class DashboardView implements ScreenView {
 
     private static Color categoryColor(Category category) {
         return switch (category) {
-            case STOCKS -> COLOR_STOCKS;
-            case FIIS -> COLOR_FIIS;
-            case FIXED_INCOME -> COLOR_FIXED_INCOME;
-            case CRYPTO -> COLOR_CRYPTO;
-            case FOREX -> COLOR_FOREX;
+            case STOCKS -> theme().categoryStocks();
+            case FIIS -> theme().categoryFiis();
+            case FIXED_INCOME -> theme().categoryFixedIncome();
+            case CRYPTO -> theme().categoryCrypto();
+            case FOREX -> theme().categoryForex();
         };
     }
 

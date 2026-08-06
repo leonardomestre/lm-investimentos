@@ -11,6 +11,8 @@ import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.Theme;
+import com.investimento.app.ui.ThemeManager;
 import javafx.beans.binding.Bindings;
 import javafx.concurrent.Task;
 import javafx.geometry.HPos;
@@ -60,25 +62,28 @@ import java.util.Map;
  */
 public class ForexCryptoView implements ScreenView {
 
-    // Cores duplicadas de theme.css/paleta.md — Canvas desenha imperativamente
-    // e não lê variável -fx-color-* do CSS (mesma nota das ATV-12/14/15).
-    private static final Color COLOR_CHART_GRID = Color.web("#eeebe5");
-    private static final Color COLOR_CHART_AXIS_TEXT = Color.web("#a2a8ab");
-    private static final Color COLOR_CHART_LINE_FOREX = Color.web("#2f6f5e"); // accent-strong — sem exemplo de câmbio no template, mesma cor padrão das demais telas
-    private static final Color COLOR_CHART_LINE_CRYPTO = Color.web("#c9a227"); // neutral-warn — cor da linha "Cotação (CoinGecko)" no template (tela 05)
-    // Linha de referência "preço médio de compra": no template desta tela ela é
-    // cinza neutro (text-faint), diferente das telas 03/04 que usam âmbar — e
-    // o gráfico do template aqui NÃO tem área preenchida sob a linha principal
-    // (ver Telas.dc.html linhas 861-869), por isso nenhuma constante de área.
-    private static final Color COLOR_AVG_PRICE_LINE = Color.web("#8a9196");
-    // Tokens de categoria usados na barra proporcional cripto/câmbio do card de
-    // resumo escuro — NÃO são os mesmos tokens fixos de categoria do donut de
-    // diversificação (paleta.md): o template desta tela (linha 895) mostra o
-    // segmento de câmbio em accent puro (#3d9c78), não em category-cambio/loss
-    // (#b3402f) — confirmado também pelo badge "Câmbio" da tabela desta mesma
-    // tela (verde/accent-strong, nunca vermelho).
-    private static final Color COLOR_CATEGORY_CRIPTO = Color.web("#c9a227");
-    private static final Color COLOR_CATEGORY_CAMBIO = Color.web("#3d9c78");
+    /**
+     * Cores de grafico do tema ativo (ver {@link ThemeManager}). Notas desta
+     * tela, que nao seguem o padrao das telas 03/04:
+     * <ul>
+     *   <li>linha de cambio em {@code accentStrong} (o template nao tem
+     *       exemplo de cambio — usa a cor padrao das demais telas) e linha de
+     *       cripto em {@code neutralWarn} (cor da linha "Cotacao (CoinGecko)"
+     *       no template, tela 05);</li>
+     *   <li>a linha de referencia "preco medio de compra" e cinza neutro
+     *       ({@code textFaint}), nao ambar como nas telas 03/04, e o grafico
+     *       aqui <b>nao</b> tem area preenchida sob a linha principal (ver
+     *       Telas.dc.html linhas 861-869);</li>
+     *   <li>a barra proporcional cripto/cambio do card escuro usa
+     *       {@code accent} puro para cambio, nao a cor fixa de categoria
+     *       ({@code categoryForex}) — o template (linha 895) mostra esse
+     *       segmento em verde, confirmado tambem pelo badge "Cambio" da
+     *       tabela desta mesma tela.</li>
+     * </ul>
+     */
+    private static Theme theme() {
+        return ThemeManager.current();
+    }
 
     private static final Locale PT_BR = new Locale("pt", "BR");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -396,7 +401,7 @@ public class ForexCryptoView implements ScreenView {
         Double changePct = cachedDailyChanges.get(asset.id());
 
         Label icon = new Label(tickerAbbreviation(asset));
-        icon.setStyle("-fx-text-fill: " + (crypto ? toHex(COLOR_CATEGORY_CRIPTO) : "-fx-color-accent") + ";"
+        icon.setStyle("-fx-text-fill: " + (crypto ? toHex(theme().categoryCrypto()) : "-fx-color-accent") + ";"
                 + " -fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 12px;");
         StackPane iconBox = new StackPane(icon);
         iconBox.setPrefSize(46, 46);
@@ -454,7 +459,7 @@ public class ForexCryptoView implements ScreenView {
             return;
         }
 
-        Color lineColor = crypto ? COLOR_CHART_LINE_CRYPTO : COLOR_CHART_LINE_FOREX;
+        Color lineColor = crypto ? theme().neutralWarn() : theme().accentStrong();
         Canvas canvas = new Canvas(640, 220);
         canvas.setId("assetChartCanvas");
         drawAssetChart(canvas, history, selected.averagePrice(), lineColor);
@@ -505,10 +510,10 @@ public class ForexCryptoView implements ScreenView {
         }
         double avgY = topPad + plotHeight * (1 - (averagePrice - rangeMin) / (rangeMax - rangeMin));
 
-        gc.setStroke(COLOR_CHART_GRID);
+        gc.setStroke(theme().chartGrid());
         gc.setLineWidth(1);
         gc.setFont(Font.font("IBM Plex Mono", 10));
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int gridLines = 5;
         for (int i = 0; i < gridLines; i++) {
             double y = topPad + plotHeight * i / (double) (gridLines - 1);
@@ -517,12 +522,12 @@ public class ForexCryptoView implements ScreenView {
             gc.fillText(formatCompact(value), 0, y + 4);
         }
 
-        gc.setStroke(COLOR_AVG_PRICE_LINE);
+        gc.setStroke(theme().textFaint());
         gc.setLineWidth(2);
         gc.setLineDashes(6, 5);
         gc.strokeLine(leftPad, avgY, width - rightPad, avgY);
         gc.setLineDashes((double[]) null);
-        gc.setFill(COLOR_AVG_PRICE_LINE);
+        gc.setFill(theme().textFaint());
         gc.fillText("PM " + formatCompact(averagePrice), width - rightPad - 60, avgY - 6);
 
         gc.setStroke(lineColor);
@@ -532,7 +537,7 @@ public class ForexCryptoView implements ScreenView {
         gc.setFill(lineColor);
         gc.fillOval(xs[n - 1] - 4.5, ys[n - 1] - 4.5, 9, 9);
 
-        gc.setFill(COLOR_CHART_AXIS_TEXT);
+        gc.setFill(theme().chartAxisText());
         int[] labelIdx = n <= 5 ? intRange(n) : new int[]{0, n / 4, n / 2, (3 * n) / 4, n - 1};
         for (int idx : labelIdx) {
             LocalDate d = history.get(idx).getDate();
@@ -542,7 +547,7 @@ public class ForexCryptoView implements ScreenView {
 
     private HBox buildChartLegend(boolean crypto, Color lineColor) {
         HBox item1 = legendItem("Cotação (" + (crypto ? "CoinGecko" : "HG Brasil") + ")", lineColor);
-        HBox item2 = legendItem("Preço médio de compra", COLOR_AVG_PRICE_LINE);
+        HBox item2 = legendItem("Preço médio de compra", theme().textFaint());
         Label caption = new Label(crypto
                 ? "Primeiros até 365 dias vindos da CoinGecko; depois, histórico local."
                 : "Série 100% construída localmente — sem histórico inicial gratuito de câmbio.");
@@ -663,10 +668,10 @@ public class ForexCryptoView implements ScreenView {
 
         Region cryptoFill = new Region();
         cryptoFill.setPrefHeight(9);
-        cryptoFill.setStyle("-fx-background-radius: 5 0 0 5; -fx-background-color: " + toHex(COLOR_CATEGORY_CRIPTO) + ";");
+        cryptoFill.setStyle("-fx-background-radius: 5 0 0 5; -fx-background-color: " + toHex(theme().categoryCrypto()) + ";");
         Region forexFill = new Region();
         forexFill.setPrefHeight(9);
-        forexFill.setStyle("-fx-background-radius: 0 5 5 0; -fx-background-color: " + toHex(COLOR_CATEGORY_CAMBIO) + ";");
+        forexFill.setStyle("-fx-background-radius: 0 5 5 0; -fx-background-color: " + toHex(theme().accent()) + ";");
 
         cryptoFill.prefWidthProperty().bind(track.widthProperty().multiply(cryptoPct / 100.0));
         forexFill.prefWidthProperty().bind(track.widthProperty().multiply(forexPct / 100.0));

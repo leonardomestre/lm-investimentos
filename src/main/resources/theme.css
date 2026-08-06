@@ -7,6 +7,16 @@
  * sem atualizar aquela documentação também.
  *
  * Uso: scene.getStylesheets().add(getClass().getResource("/theme.css").toExternalForm());
+ *
+ * TEMA ESCURO: este arquivo é a BASE (estrutura + paleta clara). O tema
+ * escuro é o /theme-dark.css, aplicado POR CIMA deste (segundo stylesheet da
+ * Scene, ver ui/ThemeManager.java) e contendo só a redefinição dos tokens
+ * -fx-color-* do bloco .root abaixo. Consequência prática ao editar aqui:
+ * toda regra de componente deve pintar via token (-fx-color-*), nunca com
+ * hex/`white` literal — um literal não tem como ser trocado pelo tema
+ * escuro. Os tokens *-inverse/on-* logo abaixo existem exatamente por isso:
+ * antes eles eram "text-primary de fundo + white de texto" hardcoded, que no
+ * escuro viraria texto branco sobre fundo claro.
  */
 
 /* ---------- Fontes ---------- */
@@ -74,6 +84,15 @@
     -fx-color-accent-hover:      #1f5346;
     -fx-color-on-accent:         #0c1512;
 
+    /* ---------- Preenchimento "invertido" (botao primario, pill ativa,
+       opcao de segmented selecionada, icone de linha de ativo) ----------
+       No tema claro e literalmente o mesmo par que estava hardcoded antes
+       (fundo #14181a = text-primary, texto branco); existe como token
+       proprio porque no tema escuro esse par inverte junto, enquanto
+       text-primary (cor de TEXTO) segue outro caminho. */
+    -fx-color-fill-inverse:      #14181a;
+    -fx-color-on-fill-inverse:   #ffffff;
+
     /* ---------- Status ---------- */
     -fx-color-gain:              #2e7d4f;
     -fx-color-gain-bg:           #f2f8f4;
@@ -83,6 +102,11 @@
     -fx-color-neutral-warn:      #c9a227;
     -fx-color-neutral-warn-dark: #a08316;
     -fx-color-neutral-warn-bg:   #fbf6e8;
+    /* Texto/glifo POR CIMA de um preenchimento solido de gain/loss (badge de
+       maior variacao do dia, opcao "Venda" selecionada). No claro e branco;
+       no escuro gain/loss sao tons claros, entao inverte para quase-preto. */
+    -fx-color-on-gain:           #ffffff;
+    -fx-color-on-loss:           #ffffff;
 
     /* ---------- Zona de perigo ---------- */
     -fx-color-danger-dark-bg:     #241a18;
@@ -188,12 +212,12 @@
 }
 
 .button-primary {
-    -fx-background-color: -fx-color-text-primary;
+    -fx-background-color: -fx-color-fill-inverse;
     -fx-background-radius: 10;
     -fx-padding: 10 16;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
-    -fx-text-fill: white;
+    -fx-text-fill: -fx-color-on-fill-inverse;
     -fx-cursor: hand;
 }
 
@@ -295,12 +319,12 @@
     -fx-cursor: hand;
 }
 .tab-pill-active {
-    -fx-background-color: -fx-color-text-primary;
+    -fx-background-color: -fx-color-fill-inverse;
     -fx-background-radius: 8;
     -fx-padding: 6 11;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 12px;
-    -fx-text-fill: white;
+    -fx-text-fill: -fx-color-on-fill-inverse;
 }
 
 /* =========================================================
@@ -366,6 +390,14 @@
     -fx-max-width: 26; -fx-max-height: 26;
     -fx-alignment: center;
 }
+/* Seta ▲/▼ dentro do badge acima — era um -fx-text-fill:white inline no
+   DashboardView; virou classe para o tema escuro poder inverter. */
+.highlight-badge-glyph {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 11px;
+}
+.highlight-badge-gain .highlight-badge-glyph { -fx-text-fill: -fx-color-on-gain; }
+.highlight-badge-loss .highlight-badge-glyph { -fx-text-fill: -fx-color-on-loss; }
 
 /* =========================================================
    Campo de formulário
@@ -543,11 +575,11 @@
     -fx-cursor: hand;
 }
 .segmented-option-selected {
-    -fx-background-color: -fx-color-text-primary;
+    -fx-background-color: -fx-color-fill-inverse;
     -fx-background-radius: 10;
     -fx-border-color: transparent;
     -fx-border-radius: 10;
-    -fx-text-fill: white;
+    -fx-text-fill: -fx-color-on-fill-inverse;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
     -fx-pref-height: 42;
@@ -580,7 +612,7 @@
     -fx-background-radius: 10;
     -fx-border-color: transparent;
     -fx-border-radius: 10;
-    -fx-text-fill: white;
+    -fx-text-fill: -fx-color-on-loss;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
     -fx-pref-height: 42;
@@ -673,11 +705,18 @@
     -fx-border-width: 1.5;
 }
 .asset-row-icon {
-    -fx-background-color: -fx-color-text-primary;
+    -fx-background-color: -fx-color-fill-inverse;
     -fx-background-radius: 8;
     -fx-min-width: 28; -fx-min-height: 28;
     -fx-max-width: 28; -fx-max-height: 28;
     -fx-alignment: center;
+}
+/* Iniciais dentro do icone acima — era -fx-text-fill:white inline no
+   RegistrationView; virou classe pelo mesmo motivo do badge de destaque. */
+.asset-row-icon-text {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 10px;
+    -fx-text-fill: -fx-color-on-fill-inverse;
 }
 
 /* =========================================================
@@ -728,6 +767,21 @@
     -fx-font-size: 12px;
     -fx-text-fill: -fx-color-danger-dark-text;
     -fx-cursor: hand;
+}
+
+/* =========================================================
+   ScrollPane
+
+   O skin padrao do Modena pinta um fundo proprio (-fx-background,
+   praticamente branco) no ScrollPane e no viewport. No tema claro isso
+   passava despercebido porque coincidia com o branco dos cards; no tema
+   escuro apareceria como um retangulo branco atras do conteudo. Deixar
+   transparente resolve nos dois temas de uma vez.
+   ========================================================= */
+
+.scroll-pane,
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
 }
 
 /* =========================================================
