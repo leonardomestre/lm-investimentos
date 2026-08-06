@@ -37,11 +37,25 @@ public final class Database {
         return connection;
     }
 
+    /**
+     * Caminho do arquivo .db no disco (%APPDATA%\InvestimentoApp\investimento.db),
+     * sem abrir/tocar a conexao. Usado pelo BackupService (ATV-19) para
+     * copiar/substituir o arquivo diretamente.
+     */
+    public static Path getDbFile() {
+        return resolveDbFile();
+    }
+
+    private static Path resolveDbFile() {
+        Path dbDir = Path.of(System.getenv("APPDATA"), "InvestimentoApp");
+        return dbDir.resolve("investimento.db");
+    }
+
     private static Connection open() {
         try {
             Path dbDir = Path.of(System.getenv("APPDATA"), "InvestimentoApp");
             Files.createDirectories(dbDir);
-            Path dbFile = dbDir.resolve("investimento.db");
+            Path dbFile = resolveDbFile();
 
             Connection conn = DriverManager.getConnection("jdbc:sqlite:" + dbFile);
             try (Statement st = conn.createStatement()) {
@@ -98,5 +112,21 @@ public final class Database {
                 connection = null;
             }
         }
+    }
+
+    /**
+     * Fecha a conexao ativa (se houver) e abre uma nova, apontando para o
+     * mesmo arquivo .db no disco (que pode ter sido substituido por fora,
+     * ver BackupService.restoreBackup, ATV-19). Depois de chamar isto,
+     * qualquer codigo que ja tinha guardado a Connection anterior (em vez de
+     * chamar Database.getConnection() de novo a cada uso) fica com uma
+     * conexao fechada/obsoleta - por isso restaurar um backup so e seguro
+     * enquanto nenhuma outra operacao de banco esta em andamento (ver
+     * BackupService).
+     */
+    public static synchronized Connection reopen() {
+        close();
+        connection = open();
+        return connection;
     }
 }
