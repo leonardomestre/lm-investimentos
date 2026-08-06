@@ -9,6 +9,8 @@ import com.investimento.app.api.hgbrasil.HgBrasilClientImpl;
 import com.investimento.app.data.Database;
 import com.investimento.app.repository.AssetRepository;
 import com.investimento.app.repository.AssetRepositoryImpl;
+import com.investimento.app.repository.DistributionRepository;
+import com.investimento.app.repository.DistributionRepositoryImpl;
 import com.investimento.app.repository.IndicatorHistoryRepository;
 import com.investimento.app.repository.IndicatorHistoryRepositoryImpl;
 import com.investimento.app.repository.PortfolioSnapshotRepository;
@@ -83,6 +85,7 @@ public class App extends Application {
         RateHistoryRepository rateHistoryRepository = new RateHistoryRepositoryImpl(connection);
         IndicatorHistoryRepository indicatorHistoryRepository = new IndicatorHistoryRepositoryImpl(connection);
         PortfolioSnapshotRepository portfolioSnapshotRepository = new PortfolioSnapshotRepositoryImpl(connection);
+        DistributionRepository distributionRepository = new DistributionRepositoryImpl(connection);
 
         HgBrasilClient hgBrasilClient = new HgBrasilClientImpl();
         BrapiClient brapiClient = new BrapiClientImpl();
@@ -98,7 +101,8 @@ public class App extends Application {
         TransactionService transactionService = new TransactionServiceImpl(transactionRepository, assetRepository);
 
         return new Shell(marketService, positionService, assetService, transactionService, brapiClient, coinGeckoClient,
-                assetRepository, portfolioSnapshotRepository, rateHistoryRepository);
+                assetRepository, portfolioSnapshotRepository, rateHistoryRepository, quoteHistoryRepository,
+                distributionRepository);
     }
 
     private void loadFonts() {

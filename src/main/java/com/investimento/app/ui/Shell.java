@@ -3,7 +3,9 @@ package com.investimento.app.ui;
 import com.investimento.app.api.brapi.BrapiClient;
 import com.investimento.app.api.coingecko.CoinGeckoClient;
 import com.investimento.app.repository.AssetRepository;
+import com.investimento.app.repository.DistributionRepository;
 import com.investimento.app.repository.PortfolioSnapshotRepository;
+import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.service.AssetService;
 import com.investimento.app.service.MarketService;
@@ -50,10 +52,13 @@ public class Shell extends BorderPane {
                  CoinGeckoClient coinGeckoClient,
                  AssetRepository assetRepository,
                  PortfolioSnapshotRepository portfolioSnapshotRepository,
-                 RateHistoryRepository rateHistoryRepository) {
+                 RateHistoryRepository rateHistoryRepository,
+                 QuoteHistoryRepository quoteHistoryRepository,
+                 DistributionRepository distributionRepository) {
         views.put(Screen.DASHBOARD, new DashboardView(marketService, positionService, assetRepository,
                 portfolioSnapshotRepository, rateHistoryRepository, this::select));
-        views.put(Screen.STOCKS_FIIS, new StocksFiisView());
+        views.put(Screen.STOCKS_FIIS, new StocksFiisView(positionService, assetRepository, quoteHistoryRepository,
+                distributionRepository, marketService));
         views.put(Screen.FIXED_INCOME, new FixedIncomeView());
         views.put(Screen.FOREX_CRYPTO, new ForexCryptoView());
         views.put(Screen.REGISTRATION, new RegistrationView(assetService, transactionService, brapiClient, coinGeckoClient));
