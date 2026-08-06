@@ -214,6 +214,10 @@
 .kpi-footer-neutral { -fx-font-family: "Manrope SemiBold"; -fx-font-size: 11px; -fx-text-fill: -fx-color-text-muted; }
 .kpi-footer-gain    { -fx-font-family: "Manrope"; -fx-font-weight: bold;     -fx-font-size: 11px; -fx-text-fill: -fx-color-gain; }
 .kpi-footer-loss    { -fx-font-family: "Manrope"; -fx-font-weight: bold;     -fx-font-size: 11px; -fx-text-fill: -fx-color-loss; }
+/* ATV-15 (Renda Fixa) — "Próximo vencimento", mesmo token de cor usado no
+   template para essa informação (contraste ok em fundo claro, diferente de
+   -fx-color-neutral-warn puro). */
+.kpi-footer-warn    { -fx-font-family: "Manrope"; -fx-font-weight: bold;     -fx-font-size: 11px; -fx-text-fill: -fx-color-neutral-warn-dark; }
 
 /* =========================================================
    Card escuro de resumo (ex.: Resumo geral do dashboard)
@@ -295,6 +299,10 @@
 .table-cell-numeric  { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary; }
 .table-cell-gain     { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 13px; -fx-text-fill: -fx-color-gain; }
 .table-cell-loss     { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 13px; -fx-text-fill: -fx-color-loss; }
+/* ATV-15 (Renda Fixa) — coluna "líquido projetado": sempre destacado em verde
+   (accent-strong), diferente de table-cell-gain/loss (que dependem do sinal
+   do ganho) — aqui é sempre o valor "bom" da linha, nunca vermelho. */
+.table-cell-net      { -fx-font-family: "IBM Plex Mono SemiBold"; -fx-font-size: 13px; -fx-text-fill: -fx-color-accent-strong; }
 .table-row-divider   { -fx-border-color: transparent transparent -fx-color-border-row transparent; -fx-border-width: 0 0 1 0; }
 
 /* =========================================================
