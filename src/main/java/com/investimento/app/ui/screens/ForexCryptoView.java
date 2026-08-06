@@ -11,6 +11,7 @@ import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.ui.Theme;
 import com.investimento.app.ui.ThemeManager;
 import javafx.beans.binding.Bindings;
@@ -345,7 +346,7 @@ public class ForexCryptoView implements ScreenView {
             double unitPrice = p.currentQuantity() > 0 ? p.currentValue() / p.currentQuantity() : 0;
             Double change = cachedDailyChanges.get(asset.id());
 
-            VBox card = buildKpiCard(assetLabel(asset) + " / BRL", formatQuotePrice(unitPrice),
+            VBox card = buildKpiCard(assetLabel(asset) + " / " + CurrencyDisplay.code(), formatQuotePrice(unitPrice),
                     change != null ? change >= 0 : null,
                     change != null ? formatSignedPercent(change) + " no dia" : "sem dado do dia (atualize as cotações)",
                     change == null ? "kpi-footer-neutral" : (change >= 0 ? "kpi-footer-gain" : "kpi-footer-loss"));
@@ -726,8 +727,8 @@ public class ForexCryptoView implements ScreenView {
         grid.add(tableHeaderCell("TIPO", HPos.LEFT), 1, 0);
         grid.add(tableHeaderCell("QUANTIDADE", HPos.RIGHT), 2, 0);
         grid.add(tableHeaderCell("COTAÇÃO ATUAL", HPos.RIGHT), 3, 0);
-        grid.add(tableHeaderCell("INVESTIDO (R$)", HPos.RIGHT), 4, 0);
-        grid.add(tableHeaderCell("ATUAL (R$)", HPos.RIGHT), 5, 0);
+        grid.add(tableHeaderCell("INVESTIDO (" + CurrencyDisplay.code() + ")", HPos.RIGHT), 4, 0);
+        grid.add(tableHeaderCell("ATUAL (" + CurrencyDisplay.code() + ")", HPos.RIGHT), 5, 0);
         grid.add(tableHeaderCell("GANHO / PERDA", HPos.RIGHT), 6, 0);
 
         for (int i = 0; i < filtered.size(); i++) {
@@ -743,8 +744,8 @@ public class ForexCryptoView implements ScreenView {
             Node badgeNode = categoryBadgeCell(asset.category(), last, selected);
             Label qtyNode = tableCell(formatQuantity(p.currentQuantity(), asset.category()), "table-cell-numeric", HPos.RIGHT, last, selected);
             Label priceNode = tableCell(formatQuotePrice(unitPrice), "table-cell-numeric", HPos.RIGHT, last, selected);
-            Label investedNode = tableCell(formatDecimal(p.investedValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
-            Label currentNode = tableCell(formatDecimal(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
+            Label investedNode = tableCell(formatMoney(p.investedValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
+            Label currentNode = tableCell(formatMoney(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
             Node gainLossNode = gainLossCell(p, last, selected);
 
             long assetId = asset.id();
@@ -859,9 +860,9 @@ public class ForexCryptoView implements ScreenView {
         totalLabel.setStyle("-fx-font-family: 'Manrope SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-secondary;");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Label investedLabel = new Label("investido " + formatDecimal(totalInvested, 2));
+        Label investedLabel = new Label("investido " + formatMoney(totalInvested, 2));
         investedLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary;");
-        Label currentLabel = new Label("atual " + formatDecimal(totalCurrent, 2));
+        Label currentLabel = new Label("atual " + formatMoney(totalCurrent, 2));
         currentLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary;");
         Label gainLossLabel = new Label(formatSignedNumber(gainLossAmount, 2) + " (" + formatSignedPercent(gainLossPct) + ")");
         gainLossLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 14px; -fx-text-fill: "
@@ -964,9 +965,15 @@ public class ForexCryptoView implements ScreenView {
     // Parsing / formatação (pt-BR)
     // =====================================================================
 
-    /** 0 decimais para cotações "grandes" (ex.: BTC/ETH), 2 para as demais (ex.: USD/EUR). */
+    /**
+     * 0 decimais para cotações "grandes" (ex.: BTC/ETH), 2 para as demais
+     * (ex.: USD/EUR). O limiar é aplicado ao valor <b>já convertido</b> para a
+     * moeda principal — é uma decisão de legibilidade da coluna, e quem define
+     * a largura do número é o valor que aparece na tela, não o BRL de origem.
+     */
     private static String formatQuotePrice(double value) {
-        return formatDecimal(value, Math.abs(value) >= 100 ? 0 : 2);
+        double converted = CurrencyDisplay.convert(value);
+        return formatDecimal(converted, Math.abs(converted) >= 100 ? 0 : 2);
     }
 
     /**
@@ -986,6 +993,15 @@ public class ForexCryptoView implements ScreenView {
         }
     }
 
+    /**
+     * Valor monetario sem simbolo, ja convertido para a moeda principal
+     * (Configuracoes > Preferencias). Todo valor que o app calcula e BRL — a
+     * conversao acontece so aqui, na formatacao. Ver {@link CurrencyDisplay}.
+     */
+    private static String formatMoney(double brlValue, int fractionDigits) {
+        return formatDecimal(CurrencyDisplay.convert(brlValue), fractionDigits);
+    }
+
     private static String formatDecimal(double value, int fractionDigits) {
         NumberFormat nf = NumberFormat.getNumberInstance(PT_BR);
         nf.setMinimumFractionDigits(fractionDigits);
@@ -994,24 +1010,26 @@ public class ForexCryptoView implements ScreenView {
     }
 
     private static String formatCurrency(double value) {
-        return "R$ " + formatDecimal(value, 2);
+        return CurrencyDisplay.symbol() + " " + formatMoney(value, 2);
     }
 
+    /** Rotulo do eixo Y do grafico — valor monetario, ja na moeda principal. */
     private static String formatCompact(double value) {
-        if (Math.abs(value) >= 1000) {
-            return formatDecimal(value / 1000.0, 0) + "k";
+        double converted = CurrencyDisplay.convert(value);
+        if (Math.abs(converted) >= 1000) {
+            return formatDecimal(converted / 1000.0, 0) + "k";
         }
-        return formatDecimal(value, 0);
+        return formatDecimal(converted, 0);
     }
 
     private static String formatSignedCurrency(double value) {
         String sign = value < 0 ? "− " : "+ ";
-        return sign + "R$ " + formatDecimal(Math.abs(value), 2);
+        return sign + CurrencyDisplay.symbol() + " " + formatMoney(Math.abs(value), 2);
     }
 
     private static String formatSignedNumber(double value, int fractionDigits) {
         String sign = value < 0 ? "−" : "+";
-        return sign + formatDecimal(Math.abs(value), fractionDigits);
+        return sign + formatMoney(Math.abs(value), fractionDigits);
     }
 
     private static String formatSignedPercent(double value) {

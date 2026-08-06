@@ -48,6 +48,11 @@ public class Shell extends BorderPane {
     private final Map<Screen, ScreenView> views = new EnumMap<>(Screen.class);
     private final Sidebar sidebar;
 
+    // Guardados so para reconfigurar a moeda de exibicao a cada navegacao
+    // (ver select) - nenhuma tela e montada a partir deles aqui.
+    private final SettingRepository settingRepository;
+    private final MarketService marketService;
+
     public Shell(MarketService marketService,
                  PositionService positionService,
                  AssetService assetService,
@@ -65,6 +70,9 @@ public class Shell extends BorderPane {
                  BackupService backupService,
                  Screen initialScreen,
                  Runnable onDataRestored) {
+        this.settingRepository = settingRepository;
+        this.marketService = marketService;
+
         views.put(Screen.DASHBOARD, new DashboardView(marketService, positionService, assetRepository,
                 portfolioSnapshotRepository, rateHistoryRepository, settingRepository, this::select));
         views.put(Screen.STOCKS_FIIS, new StocksFiisView(positionService, assetRepository, quoteHistoryRepository,
@@ -84,6 +92,14 @@ public class Shell extends BorderPane {
     }
 
     private void select(Screen screen) {
+        // Antes do onShow(), nao depois: a tela formata os valores dentro do
+        // proprio refresh(), entao a moeda tem que estar resolvida quando ele
+        // roda. E aqui, e nao so na abertura do app, porque assim trocar a
+        // moeda em Configuracoes vale ao navegar para qualquer outra tela sem
+        // reiniciar. Com a moeda em BRL (padrao) isto nao faz chamada de rede
+        // nenhuma — ver CurrencyDisplay.configure.
+        CurrencyDisplay.configure(settingRepository, marketService);
+
         setCenter(views.get(screen).getRoot());
         views.get(screen).onShow();
         sidebar.markActive(screen);

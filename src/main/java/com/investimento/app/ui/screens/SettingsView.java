@@ -7,6 +7,7 @@ import com.investimento.app.dto.SyncEvent;
 import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.BackupService;
 import com.investimento.app.service.MarketService;
+import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.ui.Theme;
 import com.investimento.app.ui.ThemeManager;
 import javafx.collections.FXCollections;
@@ -618,7 +619,15 @@ public class SettingsView implements ScreenView {
         primaryCurrencyCombo.setId("primaryCurrencyCombo");
         primaryCurrencyCombo.getStyleClass().add("text-field");
         primaryCurrencyCombo.setMaxWidth(Double.MAX_VALUE);
-        primaryCurrencyCombo.setItems(FXCollections.observableArrayList("Real (BRL)"));
+        // As 8 moedas que o app ja aceita como ativo de cambio (portanto com
+        // taxa garantida em MacroSnapshot.currencies()) + o real. A conversao
+        // e so de exibicao: o calculo e o relatorio de IR continuam em BRL.
+        primaryCurrencyCombo.setItems(FXCollections.observableArrayList(CurrencyDisplay.labels()));
+
+        Label currencyNote = new Label("converte apenas a exibição de Dashboard, Ações e FIIs, Renda Fixa e Câmbio "
+                + "e Cripto — cálculo, cadastro e relatório de IR continuam em reais");
+        currencyNote.getStyleClass().add("content-card-subtitle");
+        currencyNote.setWrapText(true);
 
         defaultChartPeriodCombo.setId("defaultChartPeriodCombo");
         defaultChartPeriodCombo.getStyleClass().add("text-field");
@@ -652,7 +661,7 @@ public class SettingsView implements ScreenView {
         HBox hideRow = new HBox(14, hideTextBox, hideDashboardValuesToggle.node);
         hideRow.setAlignment(Pos.CENTER_LEFT);
 
-        VBox card = new VBox(16, title, fieldsGrid, divider, hideRow);
+        VBox card = new VBox(16, title, fieldsGrid, currencyNote, divider, hideRow);
         card.getStyleClass().add("content-card");
         return card;
     }
@@ -721,7 +730,11 @@ public class SettingsView implements ScreenView {
         updateIntervalErrorLabel.setVisible(false);
         updateIntervalErrorLabel.setManaged(false);
 
-        primaryCurrencyCombo.setValue(settingRepository.get(SETTING_PRIMARY_CURRENCY, "Real (BRL)"));
+        // Normaliza pelo enum em vez de usar o texto cru: um valor gravado por
+        // uma versao anterior (ou editado a mao no banco) que nao esteja na
+        // lista deixaria o ComboBox exibindo um item que nao existe nela.
+        primaryCurrencyCombo.setValue(
+                CurrencyDisplay.Primary.fromLabel(settingRepository.get(SETTING_PRIMARY_CURRENCY, null)).label());
         themeToggle.setSecondSelected(
                 ThemeManager.fromSettingValue(settingRepository.get(SETTING_THEME, null)) == Theme.DARK);
         defaultChartPeriodCombo.setValue(settingRepository.get(SETTING_DEFAULT_CHART_PERIOD, "12 meses"));
@@ -784,8 +797,28 @@ public class SettingsView implements ScreenView {
         // tela nao tem grafico. Ver ThemeManager.
         ThemeManager.apply(theme);
 
-        statusLabel.setText("Configurações salvas. O tema e o intervalo de atualização já valem "
-                + "imediatamente; novas chaves de API só valem após reiniciar o aplicativo.");
+        // Moeda: resolve a taxa de cambio agora para o aviso abaixo poder
+        // dizer se ela realmente entrou em vigor. As telas de patrimonio
+        // reconfiguram sozinhas ao serem abertas (Shell.select).
+        CurrencyDisplay.configure(settingRepository, marketService);
+
+        String currencyNote;
+        if (CurrencyDisplay.isRateUnavailable()) {
+            // Nao adianta fingir que aplicou: sem taxa, a exibicao caiu de
+            // volta para BRL. O valor escolhido continua salvo e passa a valer
+            // sozinho assim que a cotacao voltar.
+            currencyNote = " A moeda escolhida foi salva, mas a taxa de câmbio não está disponível agora — "
+                    + "os valores continuam em reais até a cotação ser obtida.";
+        } else if (!CurrencyDisplay.isBrl()) {
+            currencyNote = " Valores exibidos em " + CurrencyDisplay.current().label()
+                    + " (1 " + CurrencyDisplay.code() + " = R$ "
+                    + String.format(Locale.forLanguageTag("pt-BR"), "%,.4f", CurrencyDisplay.rate()) + ").";
+        } else {
+            currencyNote = "";
+        }
+
+        statusLabel.setText("Configurações salvas. O tema, a moeda principal e o intervalo de atualização já valem "
+                + "imediatamente; novas chaves de API só valem após reiniciar o aplicativo." + currencyNote);
     }
 
     private static boolean isValidPositiveInteger(String text) {

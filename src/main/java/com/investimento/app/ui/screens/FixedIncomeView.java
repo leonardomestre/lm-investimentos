@@ -7,6 +7,7 @@ import com.investimento.app.dto.FixedIncomeProjectionPoint;
 import com.investimento.app.dto.Position;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.ui.Theme;
 import com.investimento.app.ui.ThemeManager;
 import javafx.geometry.HPos;
@@ -544,8 +545,8 @@ public class FixedIncomeView implements ScreenView {
             Label rateNode = tableCell(contractedRateLabel(asset), "table-cell-numeric", HPos.LEFT, last, selected);
             Label appliedNode = tableCell(formatDate(asset.investmentDate()), "table-row-secondary", HPos.LEFT, last, selected);
             Label maturityNode = tableCell(formatDate(asset.maturityDate()), "table-row-secondary", HPos.LEFT, last, selected);
-            Label grossNode = tableCell(formatDecimal(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
-            Label netNode = tableCell(formatDecimal(netValueOf(asset.id()), 2), "table-cell-net", HPos.RIGHT, last, selected);
+            Label grossNode = tableCell(formatMoney(p.currentValue(), 2), "table-cell-numeric", HPos.RIGHT, last, selected);
+            Label netNode = tableCell(formatMoney(netValueOf(asset.id()), 2), "table-cell-net", HPos.RIGHT, last, selected);
 
             long assetId = asset.id();
             for (Node n : List.of(titleNode, indexerNode, rateNode, appliedNode, maturityNode, grossNode, netNode)) {
@@ -632,9 +633,9 @@ public class FixedIncomeView implements ScreenView {
         totalLabel.setStyle("-fx-font-family: 'Manrope SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-secondary;");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Label grossLabel = new Label("bruto " + formatDecimal(totalGross, 2));
+        Label grossLabel = new Label("bruto " + formatMoney(totalGross, 2));
         grossLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary;");
-        Label netLabel = new Label("líquido " + formatDecimal(totalNet, 2));
+        Label netLabel = new Label("líquido " + formatMoney(totalNet, 2));
         netLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 14px; -fx-text-fill: -fx-color-accent-strong;");
         HBox values = new HBox(26, grossLabel, netLabel);
         row.getChildren().addAll(totalLabel, spacer, values);
@@ -711,7 +712,7 @@ public class FixedIncomeView implements ScreenView {
         StackPane barStack = new StackPane(track, fill);
         barStack.setAlignment(Pos.CENTER_LEFT);
 
-        Label valueLabel = new Label(formatDecimal(value, 2));
+        Label valueLabel = new Label(formatMoney(value, 2));
         valueLabel.setStyle("-fx-font-family: 'IBM Plex Mono SemiBold'; -fx-font-size: 13px; -fx-text-fill: -fx-color-text-primary;");
 
         grid.add(yearLabel, 0, 0);
@@ -877,6 +878,15 @@ public class FixedIncomeView implements ScreenView {
     // Parsing / formatação (pt-BR)
     // =====================================================================
 
+    /**
+     * Valor monetario sem simbolo, ja convertido para a moeda principal
+     * (Configuracoes > Preferencias). Todo valor que o app calcula e BRL — a
+     * conversao acontece so aqui, na formatacao. Ver {@link CurrencyDisplay}.
+     */
+    private static String formatMoney(double brlValue, int fractionDigits) {
+        return formatDecimal(CurrencyDisplay.convert(brlValue), fractionDigits);
+    }
+
     private static String formatDecimal(double value, int fractionDigits) {
         NumberFormat nf = NumberFormat.getNumberInstance(PT_BR);
         nf.setMinimumFractionDigits(fractionDigits);
@@ -885,12 +895,14 @@ public class FixedIncomeView implements ScreenView {
     }
 
     private static String formatCurrency(double value) {
-        return "R$ " + formatDecimal(value, 2);
+        return CurrencyDisplay.symbol() + " " + formatMoney(value, 2);
     }
 
+    /** Rotulo do eixo Y do grafico — valor monetario, ja na moeda principal. */
     private static String formatCompact(double value) {
-        if (Math.abs(value) >= 1000) {
-            return formatDecimal(value / 1000.0, 0) + "k";
+        double converted = CurrencyDisplay.convert(value);
+        if (Math.abs(converted) >= 1000) {
+            return formatDecimal(converted / 1000.0, 0) + "k";
         }
         return formatDecimal(value, 0);
     }

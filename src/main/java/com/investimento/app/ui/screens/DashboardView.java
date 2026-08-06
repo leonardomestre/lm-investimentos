@@ -17,6 +17,7 @@ import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.ui.Theme;
 import com.investimento.app.ui.ThemeManager;
 import com.investimento.app.ui.Screen;
@@ -787,7 +788,7 @@ public class DashboardView implements ScreenView {
     private VBox buildGainLossCard(List<Position> positions) {
         Label title = new Label("Ganho / perda por categoria");
         title.getStyleClass().add("content-card-title");
-        Label subtitle = new Label("resultado em R$ acumulado por categoria");
+        Label subtitle = new Label("resultado em " + CurrencyDisplay.symbol() + " acumulado por categoria");
         subtitle.getStyleClass().add("content-card-subtitle");
         VBox titleBox = new VBox(4, title, subtitle);
 
@@ -938,7 +939,7 @@ public class DashboardView implements ScreenView {
             Label ticker = tableCellPrimary(assetLabel(position.asset()), last);
             Label categ = tableCellSecondary(categoryLabelShort(position.asset().category()), last);
             Label value = tableCellNumericNeutral(
-                    hideValues ? MASKED_VALUE : formatDecimal(position.currentValue(), 2), last);
+                    hideValues ? MASKED_VALUE : formatMoney(position.currentValue(), 2), last);
             Label result = tableCellResult(position.gainLossPercent(), last);
 
             for (Label cell : List.of(ticker, categ, value, result)) {
@@ -1216,27 +1217,36 @@ public class DashboardView implements ScreenView {
     // (largura de coluna, alinhamento a direita etc.).
     private static final String MASKED_VALUE = "••••••";
 
+    /**
+     * Valor monetário sem símbolo, já convertido para a moeda principal
+     * (Configurações &gt; Preferências). Todo valor que o app calcula é BRL —
+     * a conversão acontece só aqui, na formatação. Ver {@link CurrencyDisplay}.
+     */
+    private static String formatMoney(double brlValue, int fractionDigits) {
+        return formatDecimal(CurrencyDisplay.convert(brlValue), fractionDigits);
+    }
+
     private String formatCurrency(double value) {
         if (hideValues) {
-            return "R$ " + MASKED_VALUE;
+            return CurrencyDisplay.symbol() + " " + MASKED_VALUE;
         }
-        return "R$ " + formatDecimal(value, 2);
+        return CurrencyDisplay.symbol() + " " + formatMoney(value, 2);
     }
 
     private String formatSignedCurrency(double value) {
         String sign = value < 0 ? "− " : "+ ";
         if (hideValues) {
-            return sign + "R$ " + MASKED_VALUE;
+            return sign + CurrencyDisplay.symbol() + " " + MASKED_VALUE;
         }
-        return sign + "R$ " + formatDecimal(Math.abs(value), 2);
+        return sign + CurrencyDisplay.symbol() + " " + formatMoney(Math.abs(value), 2);
     }
 
     private String formatSignedCurrencyNoDecimals(double value) {
         String sign = value < 0 ? "− " : "+ ";
         if (hideValues) {
-            return sign + "R$ " + MASKED_VALUE;
+            return sign + CurrencyDisplay.symbol() + " " + MASKED_VALUE;
         }
-        return sign + "R$ " + formatDecimal(Math.abs(value), 0);
+        return sign + CurrencyDisplay.symbol() + " " + formatMoney(Math.abs(value), 0);
     }
 
     /** Usado só para valores monetários (ex.: ganho/perda por categoria) — respeita "ocultar valores". */
@@ -1245,7 +1255,7 @@ public class DashboardView implements ScreenView {
         if (hideValues) {
             return sign + MASKED_VALUE;
         }
-        return sign + formatDecimal(Math.abs(value), 0);
+        return sign + formatMoney(Math.abs(value), 0);
     }
 
     private static String formatSignedPercent(double value) {
@@ -1263,18 +1273,20 @@ public class DashboardView implements ScreenView {
         if (hideValues) {
             return MASKED_VALUE;
         }
-        if (Math.abs(value) >= 1000) {
-            return formatDecimal(value / 1000.0, 0) + "k";
+        double converted = CurrencyDisplay.convert(value);
+        if (Math.abs(converted) >= 1000) {
+            return formatDecimal(converted / 1000.0, 0) + "k";
         }
-        return formatDecimal(value, 0);
+        return formatDecimal(converted, 0);
     }
 
     private String formatCompactCurrency(double value) {
         if (hideValues) {
-            return "R$ " + MASKED_VALUE;
+            return CurrencyDisplay.symbol() + " " + MASKED_VALUE;
         }
-        if (Math.abs(value) >= 1000) {
-            return "R$ " + formatDecimal(value / 1000.0, 1) + "k";
+        double converted = CurrencyDisplay.convert(value);
+        if (Math.abs(converted) >= 1000) {
+            return CurrencyDisplay.symbol() + " " + formatDecimal(converted / 1000.0, 1) + "k";
         }
         return formatCurrency(value);
     }

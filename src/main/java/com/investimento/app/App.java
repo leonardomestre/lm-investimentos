@@ -36,6 +36,7 @@ import com.investimento.app.service.PositionService;
 import com.investimento.app.service.PositionServiceImpl;
 import com.investimento.app.service.TransactionService;
 import com.investimento.app.service.TransactionServiceImpl;
+import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.ui.Screen;
 import com.investimento.app.ui.Shell;
 import com.investimento.app.ui.Theme;
@@ -149,6 +150,12 @@ public class App extends Application {
         TransactionService transactionService = new TransactionServiceImpl(transactionRepository, assetRepository);
         IncomeTaxService incomeTaxService = new IncomeTaxServiceImpl(assetRepository, positionService);
         BackupService backupService = new BackupServiceImpl();
+
+        // Moeda principal de exibicao (Configuracoes > Preferencias) — resolve
+        // a taxa uma vez aqui para as telas ja abrirem na moeda certa; o
+        // Shell reconfigura a cada navegacao. Sem custo nenhum quando a moeda
+        // e BRL (o padrao): nao ha chamada de rede. Ver CurrencyDisplay.
+        CurrencyDisplay.configure(settingRepository, marketService);
 
         return new Shell(marketService, positionService, assetService, transactionService, incomeTaxService,
                 hgBrasilClient, brapiClient, coinGeckoClient, assetRepository, portfolioSnapshotRepository,

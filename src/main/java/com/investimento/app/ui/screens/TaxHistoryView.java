@@ -10,6 +10,7 @@ import com.investimento.app.dto.TransactionDTO;
 import com.investimento.app.service.AssetService;
 import com.investimento.app.service.IncomeTaxService;
 import com.investimento.app.service.PositionService;
+import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.service.TransactionService;
 import javafx.collections.FXCollections;
 import javafx.geometry.HPos;
@@ -129,7 +130,8 @@ public class TaxHistoryView implements ScreenView {
         VBox annualSummaryCard = buildAnnualSummaryCard();
         VBox transactionsCard = buildTransactionsCard();
 
-        VBox contentBody = new VBox(20, filtersCard, taxAssessmentCard, annualSummaryCard, transactionsCard);
+        VBox contentBody = new VBox(20, brlNoticeLabel, filtersCard, taxAssessmentCard,
+                annualSummaryCard, transactionsCard);
         contentBody.setPadding(new Insets(24, 28, 28, 28));
 
         ScrollPane scrollPane = new ScrollPane(contentBody);
@@ -149,6 +151,34 @@ public class TaxHistoryView implements ScreenView {
     @Override
     public void onShow() {
         refresh();
+    }
+
+
+    /**
+     * Aviso exibido so quando a moeda principal (Configuracoes) nao e o real.
+     * Esta tela fica sempre em BRL de proposito — ver {@link CurrencyDisplay}
+     * para o porque de cada uma das duas telas que nao convertem.
+     */
+    private final Label brlNoticeLabel = buildBrlNoticeLabel();
+
+    private static Label buildBrlNoticeLabel() {
+        Label label = new Label();
+        label.setId("brlNoticeLabel");
+        label.getStyleClass().add("form-info-label");
+        label.setWrapText(true);
+        label.setVisible(false);
+        label.setManaged(false);
+        return label;
+    }
+
+    /** Liga/desliga o aviso acima conforme a moeda principal em vigor. */
+    private void refreshBrlNotice(String reason) {
+        boolean show = !CurrencyDisplay.isBrl();
+        brlNoticeLabel.setText(show
+                ? "Moeda principal: " + CurrencyDisplay.current().label() + ". " + reason
+                : "");
+        brlNoticeLabel.setVisible(show);
+        brlNoticeLabel.setManaged(show);
     }
 
     // =====================================================================
@@ -267,6 +297,13 @@ public class TaxHistoryView implements ScreenView {
     // =====================================================================
 
     private void refresh() {
+        // Relatorio fiscal brasileiro: os tetos de isencao mostrados nesta
+        // tela (R$ 20.000 / R$ 35.000) sao valores legais em real, entao os
+        // valores ao lado deles tambem tem que ser — converter so os valores
+        // faria a tela se contradizer.
+        refreshBrlNotice("os valores desta tela e do CSV continuam em reais — "
+                + "é um relatório fiscal brasileiro.");
+
         List<AssetDTO> assets = assetService.listAssets(true); // inclui inativos - historico de IR nao some (ATV-11)
         assetsById = assets.stream().collect(Collectors.toMap(AssetDTO::id, a -> a));
 
