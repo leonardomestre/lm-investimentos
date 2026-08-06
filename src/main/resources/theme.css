@@ -234,6 +234,10 @@
 .card-dark-label    { -fx-font-family: "Manrope Medium"; -fx-font-size: 12px; -fx-text-fill: -fx-color-sidebar-text; }
 .card-dark-value    { -fx-font-family: "Manrope"; -fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: white; }
 .card-dark-value-gain { -fx-font-family: "Manrope"; -fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: -fx-color-gain-on-dark; }
+/* ATV-16 (Câmbio e Cripto) — mesmo padrao de card-dark-value-gain, mas para o
+   caso de perda no card escuro de resumo; reaproveita o token ja existente de
+   texto sobre fundo escuro (danger-dark-text), nao introduz hex novo. */
+.card-dark-value-loss { -fx-font-family: "Manrope"; -fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: -fx-color-danger-dark-text; }
 .card-dark-divider  { -fx-background-color: -fx-color-sidebar-divider; -fx-pref-height: 1; }
 .card-dark-progress-track { -fx-background-color: -fx-color-sidebar-divider; -fx-background-radius: 5; -fx-pref-height: 8; }
 .card-dark-progress-fill  { -fx-background-color: -fx-color-accent; -fx-background-radius: 5; }
