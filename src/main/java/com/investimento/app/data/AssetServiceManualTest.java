@@ -18,6 +18,8 @@ import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.QuoteHistoryRepositoryImpl;
 import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.repository.RateHistoryRepositoryImpl;
+import com.investimento.app.repository.SettingRepository;
+import com.investimento.app.repository.SettingRepositoryImpl;
 import com.investimento.app.service.AssetService;
 import com.investimento.app.service.AssetServiceImpl;
 import com.investimento.app.service.MarketService;
@@ -68,6 +70,7 @@ public final class AssetServiceManualTest {
         QuoteHistoryRepository quoteHistoryRepository = new QuoteHistoryRepositoryImpl(conn);
         RateHistoryRepository rateHistoryRepository = new RateHistoryRepositoryImpl(conn);
         IndicatorHistoryRepository indicatorHistoryRepository = new IndicatorHistoryRepositoryImpl(conn);
+        SettingRepository settingRepository = new SettingRepositoryImpl(conn);
 
         BrapiClientImpl brapiClient = new BrapiClientImpl();
         CoinGeckoClientImpl coinGeckoClient = new CoinGeckoClientImpl();
@@ -75,7 +78,7 @@ public final class AssetServiceManualTest {
 
         MarketService marketService = new MarketServiceImpl(
                 hgBrasilClient, brapiClient, coinGeckoClient,
-                rateHistoryRepository, indicatorHistoryRepository, quoteHistoryRepository);
+                rateHistoryRepository, indicatorHistoryRepository, quoteHistoryRepository, settingRepository);
 
         AssetService assetService = new AssetServiceImpl(assetRepository, brapiClient, coinGeckoClient, marketService);
 

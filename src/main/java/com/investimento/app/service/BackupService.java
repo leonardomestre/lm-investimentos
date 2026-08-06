@@ -29,4 +29,18 @@ public interface BackupService {
      * terminarem.
      */
     void restoreBackup(Path backupFile) throws IOException;
+
+    /**
+     * Apaga todos os dados do usuario (ATV-18, "zona de perigo") - executa
+     * {@code DELETE FROM} em cada tabela da conexao ja aberta (assets,
+     * transactions/quote_history/distributions via {@code ON DELETE CASCADE},
+     * rate_history, indicator_history, portfolio_snapshot e settings).
+     *
+     * <p>Diferente de {@link #restoreBackup(Path)}, NAO fecha/reabre a
+     * conexao (nao chama {@code Database.reopen()}) - os repositories ja
+     * construidos no composition root continuam validos depois de chamar
+     * isto, sem precisar reconstruir nada. Acao irreversivel - a UI (ATV-18)
+     * e responsavel por exigir confirmacao explicita antes de chamar.</p>
+     */
+    void eraseAllData();
 }

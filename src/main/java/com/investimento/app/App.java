@@ -19,10 +19,15 @@ import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.QuoteHistoryRepositoryImpl;
 import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.repository.RateHistoryRepositoryImpl;
+import com.investimento.app.repository.SettingRepository;
+import com.investimento.app.repository.SettingRepositoryImpl;
 import com.investimento.app.repository.TransactionRepository;
 import com.investimento.app.repository.TransactionRepositoryImpl;
+import com.investimento.app.service.ApiKeyResolver;
 import com.investimento.app.service.AssetService;
 import com.investimento.app.service.AssetServiceImpl;
+import com.investimento.app.service.BackupService;
+import com.investimento.app.service.BackupServiceImpl;
 import com.investimento.app.service.IncomeTaxService;
 import com.investimento.app.service.IncomeTaxServiceImpl;
 import com.investimento.app.service.MarketService;
@@ -31,6 +36,7 @@ import com.investimento.app.service.PositionService;
 import com.investimento.app.service.PositionServiceImpl;
 import com.investimento.app.service.TransactionService;
 import com.investimento.app.service.TransactionServiceImpl;
+import com.investimento.app.ui.Screen;
 import com.investimento.app.ui.Shell;
 import javafx.application.Application;
 import javafx.scene.Scene;
@@ -47,7 +53,17 @@ import java.sql.Connection;
  * <p>Tambem funciona como composition root (ATV-12): monta os 3 clientes de
  * API, os repositories e os services (sem framework de DI - projeto nao usa
  * um) e injeta no {@link Shell}, que repassa para as telas reais que
- * precisarem (por enquanto so {@code DashboardView}).</p>
+ * precisarem.</p>
+ *
+ * <p>ATV-18: a chave da HG Brasil/token da brapi.dev agora sao resolvidos via
+ * {@link ApiKeyResolver} (prioridade {@code settings} &gt; variavel de
+ * ambiente &gt; fallback do projeto) — ver {@code SettingsView}. Tambem expoe
+ * {@link #rebuildShell(Stage)}, usado como callback pela tela de
+ * Configuracoes depois de um {@code BackupService.restoreBackup} bem
+ * sucedido: como {@code restoreBackup} fecha/reabre a {@link Connection}
+ * unica de {@link Database} (ATV-19), qualquer repository construido com a
+ * conexao antiga fica obsoleto — reconstruir o {@link Shell} inteiro com uma
+ * conexao nova evita exigir reinicio manual do processo.</p>
  */
 public class App extends Application {
 
@@ -70,7 +86,7 @@ public class App extends Application {
 
         loadFonts();
 
-        Shell shell = buildShell(connection);
+        Shell shell = buildShell(connection, Screen.DASHBOARD, () -> rebuildShell(stage));
 
         Scene scene = new Scene(shell, 1440, 900);
         scene.getStylesheets().add(getClass().getResource("/theme.css").toExternalForm());
@@ -80,7 +96,20 @@ public class App extends Application {
         stage.show();
     }
 
-    private Shell buildShell(Connection connection) {
+    /**
+     * Reconstroi o {@link Shell} inteiro com uma {@link Connection} nova
+     * (chamado pela tela de Configuracoes depois de {@code
+     * BackupService.restoreBackup}) e substitui a raiz da {@link Scene} ja
+     * aberta — mantem o usuario na tela de Configuracoes em vez de voltar
+     * para o Dashboard.
+     */
+    private void rebuildShell(Stage stage) {
+        Connection connection = Database.getConnection();
+        Shell newShell = buildShell(connection, Screen.SETTINGS, () -> rebuildShell(stage));
+        stage.getScene().setRoot(newShell);
+    }
+
+    private Shell buildShell(Connection connection, Screen initialScreen, Runnable onDataRestored) {
         AssetRepository assetRepository = new AssetRepositoryImpl(connection);
         TransactionRepository transactionRepository = new TransactionRepositoryImpl(connection);
         QuoteHistoryRepository quoteHistoryRepository = new QuoteHistoryRepositoryImpl(connection);
@@ -88,13 +117,20 @@ public class App extends Application {
         IndicatorHistoryRepository indicatorHistoryRepository = new IndicatorHistoryRepositoryImpl(connection);
         PortfolioSnapshotRepository portfolioSnapshotRepository = new PortfolioSnapshotRepositoryImpl(connection);
         DistributionRepository distributionRepository = new DistributionRepositoryImpl(connection);
+        SettingRepository settingRepository = new SettingRepositoryImpl(connection);
 
-        HgBrasilClient hgBrasilClient = new HgBrasilClientImpl();
-        BrapiClient brapiClient = new BrapiClientImpl();
+        // ATV-18: settings (banco) > variavel de ambiente > fallback do
+        // projeto - mesmos fallbacks ja usados pelos construtores sem
+        // argumento de HgBrasilClientImpl/BrapiClientImpl (ATV-03/04).
+        String hgBrasilKey = ApiKeyResolver.resolve(settingRepository, "hgbrasil.apiKey", "HG_BRASIL_KEY", "ee3b78db");
+        String brapiToken = ApiKeyResolver.resolve(settingRepository, "brapi.token", "BRAPI_TOKEN", "jS1ByoxrxvQAaFBZmcZMU6");
+
+        HgBrasilClient hgBrasilClient = new HgBrasilClientImpl(hgBrasilKey);
+        BrapiClient brapiClient = new BrapiClientImpl(brapiToken);
         CoinGeckoClient coinGeckoClient = new CoinGeckoClientImpl();
 
         MarketService marketService = new MarketServiceImpl(hgBrasilClient, brapiClient, coinGeckoClient,
-                rateHistoryRepository, indicatorHistoryRepository, quoteHistoryRepository);
+                rateHistoryRepository, indicatorHistoryRepository, quoteHistoryRepository, settingRepository);
 
         PositionService positionService = new PositionServiceImpl(assetRepository, transactionRepository,
                 marketService, quoteHistoryRepository, rateHistoryRepository, indicatorHistoryRepository);
@@ -102,10 +138,12 @@ public class App extends Application {
         AssetService assetService = new AssetServiceImpl(assetRepository, brapiClient, coinGeckoClient, marketService);
         TransactionService transactionService = new TransactionServiceImpl(transactionRepository, assetRepository);
         IncomeTaxService incomeTaxService = new IncomeTaxServiceImpl(assetRepository, positionService);
+        BackupService backupService = new BackupServiceImpl();
 
         return new Shell(marketService, positionService, assetService, transactionService, incomeTaxService,
                 brapiClient, coinGeckoClient, assetRepository, portfolioSnapshotRepository, rateHistoryRepository,
-                quoteHistoryRepository, distributionRepository);
+                quoteHistoryRepository, distributionRepository, settingRepository, backupService, initialScreen,
+                onDataRestored);
     }
 
     private void loadFonts() {
