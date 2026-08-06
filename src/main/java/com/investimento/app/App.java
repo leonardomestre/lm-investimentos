@@ -141,9 +141,9 @@ public class App extends Application {
         BackupService backupService = new BackupServiceImpl();
 
         return new Shell(marketService, positionService, assetService, transactionService, incomeTaxService,
-                brapiClient, coinGeckoClient, assetRepository, portfolioSnapshotRepository, rateHistoryRepository,
-                quoteHistoryRepository, distributionRepository, settingRepository, backupService, initialScreen,
-                onDataRestored);
+                hgBrasilClient, brapiClient, coinGeckoClient, assetRepository, portfolioSnapshotRepository,
+                rateHistoryRepository, quoteHistoryRepository, distributionRepository, settingRepository,
+                backupService, initialScreen, onDataRestored);
     }
 
     private void loadFonts() {

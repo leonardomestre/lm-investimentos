@@ -1,8 +1,14 @@
 package com.investimento.app.ui.screens;
 
+import com.investimento.app.api.brapi.BrapiClient;
+import com.investimento.app.api.coingecko.CoinGeckoClient;
+import com.investimento.app.api.hgbrasil.HgBrasilClient;
+import com.investimento.app.dto.SyncEvent;
 import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.BackupService;
+import com.investimento.app.service.MarketService;
 import javafx.collections.FXCollections;
+import javafx.concurrent.Task;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -29,7 +35,10 @@ import javafx.stage.FileChooser;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -89,9 +98,14 @@ public class SettingsView implements ScreenView {
     private final SettingRepository settingRepository;
     private final BackupService backupService;
     private final Runnable onDataRestored;
+    private final HgBrasilClient hgBrasilClient;
+    private final BrapiClient brapiClient;
+    private final CoinGeckoClient coinGeckoClient;
+    private final MarketService marketService;
 
     private final VBox root;
     private final Label statusLabel = new Label(" ");
+    private final VBox syncTableBody = new VBox();
 
     private final SecretField hgBrasilKeyField = new SecretField("hgBrasilKey");
     private final SecretField brapiTokenField = new SecretField("brapiToken");
@@ -108,10 +122,16 @@ public class SettingsView implements ScreenView {
     private final ToggleSwitch pauseWeekendsToggle = new ToggleSwitch();
     private final ToggleSwitch alertOnFailureToggle = new ToggleSwitch();
 
-    public SettingsView(SettingRepository settingRepository, BackupService backupService, Runnable onDataRestored) {
+    public SettingsView(SettingRepository settingRepository, BackupService backupService, Runnable onDataRestored,
+                         HgBrasilClient hgBrasilClient, BrapiClient brapiClient, CoinGeckoClient coinGeckoClient,
+                         MarketService marketService) {
         this.settingRepository = settingRepository;
         this.backupService = backupService;
         this.onDataRestored = onDataRestored;
+        this.hgBrasilClient = hgBrasilClient;
+        this.brapiClient = brapiClient;
+        this.coinGeckoClient = coinGeckoClient;
+        this.marketService = marketService;
 
         HBox header = buildHeader();
         VBox apiKeysCard = buildApiKeysCard();
@@ -226,9 +246,9 @@ public class SettingsView implements ScreenView {
         refreshStatuses.run();
 
         VBox brapiBox = buildApiKeyBox("brapi.dev", "Ações, FIIs, ETFs e BDRs da B3 · cotação e histórico",
-                "TOKEN", brapiTokenField.row, brapiStatus);
+                "TOKEN", brapiTokenField.row, brapiStatus, () -> brapiClient.getQuote("PETR4"));
         VBox hgBrasilBox = buildApiKeyBox("HG Brasil", "Selic, CDI, IPCA, índices e câmbio USD/EUR",
-                "CHAVE", hgBrasilKeyField.row, hgBrasilStatus);
+                "CHAVE", hgBrasilKeyField.row, hgBrasilStatus, hgBrasilClient::getSnapshot);
         VBox coinGeckoBox = buildCoinGeckoBox(coinGeckoStatus);
 
         GridPane grid = evenColumnsGrid(3, 14);
@@ -244,7 +264,8 @@ public class SettingsView implements ScreenView {
         return card;
     }
 
-    private VBox buildApiKeyBox(String name, String description, String fieldLabel, HBox fieldRow, ApiStatusIndicator status) {
+    private VBox buildApiKeyBox(String name, String description, String fieldLabel, HBox fieldRow,
+                                 ApiStatusIndicator status, Runnable networkCall) {
         Label nameLabel = new Label(name);
         nameLabel.setStyle("-fx-font-family: 'Manrope'; -fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: -fx-color-text-primary;");
         Region spacer = new Region();
@@ -258,7 +279,7 @@ public class SettingsView implements ScreenView {
 
         VBox fieldBox = fieldGroup(fieldLabel, fieldRow);
 
-        Button testButton = buildTestConnectionButton();
+        Button testButton = buildTestConnectionButton(name, networkCall);
 
         VBox box = new VBox(13, nameRow, descLabel, fieldBox, testButton);
         box.setStyle("-fx-background-color: -fx-color-bg-surface; -fx-border-color: -fx-color-border-card;"
@@ -284,7 +305,7 @@ public class SettingsView implements ScreenView {
         noKeyLabel.setMaxWidth(Double.MAX_VALUE);
         VBox fieldBox = fieldGroup("CHAVE (OPCIONAL)", noKeyLabel);
 
-        Button testButton = buildTestConnectionButton();
+        Button testButton = buildTestConnectionButton("CoinGecko", () -> coinGeckoClient.getPrices(List.of("BTC")));
 
         VBox box = new VBox(13, nameRow, descLabel, fieldBox, testButton);
         box.setStyle("-fx-background-color: -fx-color-bg-surface; -fx-border-color: -fx-color-border-card;"
@@ -292,15 +313,54 @@ public class SettingsView implements ScreenView {
         return box;
     }
 
-    private Button buildTestConnectionButton() {
+    /**
+     * Testa conectividade real chamando {@code networkCall} (o cliente
+     * correspondente, ex. {@code hgBrasilClient::getSnapshot}) num {@link
+     * Task} em background (RT06) — mede o tempo de resposta e mostra
+     * sucesso/erro em {@link #statusLabel}. Os clientes injetados foram
+     * construídos com a chave/token ativos **no momento em que o app abriu**
+     * (ATV-18: chave nova só vale após reiniciar) — por isso o resultado do
+     * teste sempre reflete a sessão atual, nunca um valor ainda não salvo no
+     * campo de texto.
+     */
+    private Button buildTestConnectionButton(String apiName, Runnable networkCall) {
         Button button = new Button("Testar conexão");
         button.getStyleClass().add("pill-secondary");
         button.setMaxWidth(Double.MAX_VALUE);
         button.setAlignment(Pos.CENTER);
-        // Verificação real de conectividade e métricas de uso/latência (barra
-        // do template) ainda não implementadas — deliberadamente fora deste
-        // ajuste de layout, ver Javadoc de buildApiKeysCard.
-        button.setOnAction(e -> statusLabel.setText("Teste de conexão ainda não implementado."));
+        button.setOnAction(e -> {
+            button.setDisable(true);
+            button.setText("Testando...");
+            long startedAt = System.currentTimeMillis();
+            Task<Void> task = new Task<>() {
+                @Override
+                protected Void call() {
+                    networkCall.run();
+                    return null;
+                }
+            };
+            task.setOnSucceeded(ev -> {
+                button.setDisable(false);
+                button.setText("Testar conexão");
+                long elapsedMs = System.currentTimeMillis() - startedAt;
+                statusLabel.getStyleClass().remove("form-error-label");
+                if (!statusLabel.getStyleClass().contains("form-info-label")) {
+                    statusLabel.getStyleClass().add("form-info-label");
+                }
+                statusLabel.setText(apiName + ": conexão OK (" + elapsedMs
+                        + " ms) — testado com a chave/token ativos nesta sessão.");
+            });
+            task.setOnFailed(ev -> {
+                button.setDisable(false);
+                button.setText("Testar conexão");
+                Throwable ex = task.getException();
+                showError(apiName + ": falha na conexão — "
+                        + (ex != null && ex.getMessage() != null ? ex.getMessage() : "erro desconhecido"));
+            });
+            Thread thread = new Thread(task, "test-connection-" + apiName);
+            thread.setDaemon(true);
+            thread.start();
+        });
         return button;
     }
 
@@ -389,16 +449,116 @@ public class SettingsView implements ScreenView {
         divider1.setMaxWidth(Double.MAX_VALUE);
 
         HBox snapshotRow = buildToggleRow("Snapshot diário do patrimônio",
-                "grava o valor total ao abrir o app (hoje sempre ativo, ainda não desligável de verdade)", snapshotEnabledToggle);
+                "grava o valor total ao abrir o app — desligar aqui pausa novos pontos no gráfico do Dashboard", snapshotEnabledToggle);
         HBox pauseRow = buildToggleRow("Pausar em fins de semana e feriados",
-                "não consome requisições com o mercado fechado (ainda não implementado)", pauseWeekendsToggle);
+                "não consome requisições com o mercado fechado (só sábado/domingo — feriados não cobertos)", pauseWeekendsToggle);
         HBox alertRow = buildToggleRow("Avisar quando a API falhar",
-                "notificação no dashboard com a última cotação válida (ainda não implementado)", alertOnFailureToggle);
+                "mostra um aviso no Dashboard com a última cotação válida quando uma busca falhar", alertOnFailureToggle);
         VBox togglesBox = new VBox(13, snapshotRow, pauseRow, alertRow);
 
-        VBox card = new VBox(16, titleBox, rowsBox, customFieldBox, updateIntervalErrorLabel, divider1, togglesBox);
+        Region divider2 = new Region();
+        divider2.setStyle("-fx-background-color: -fx-color-border-row; -fx-pref-height: 1;");
+        divider2.setMaxWidth(Double.MAX_VALUE);
+        VBox syncSection = buildSyncSection();
+
+        VBox card = new VBox(16, titleBox, rowsBox, customFieldBox, updateIntervalErrorLabel, divider1, togglesBox,
+                divider2, syncSection);
         card.getStyleClass().add("content-card");
         return card;
+    }
+
+    /**
+     * "Últimas sincronizações" (Telas.dc.html linhas 1242-1253) — dado real,
+     * mas só em memória: {@link MarketService#getRecentSyncs()} guarda as
+     * últimas {@code MAX_RECENT_SYNCS} tentativas desde que o app foi aberto
+     * (não há log persistido no banco). Atualizado toda vez que a tela é
+     * exibida ({@link #onShow()}), não em tempo real enquanto outra tela
+     * roda um {@code updateQuotes} — suficiente para o caso de uso (conferir
+     * depois de mexer nas configurações), sem precisar de um mecanismo de
+     * observação entre telas que o app não tem hoje.
+     */
+    private VBox buildSyncSection() {
+        Label title = new Label("Últimas sincronizações");
+        title.setStyle("-fx-font-family: 'Manrope'; -fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: -fx-color-text-primary;");
+
+        syncTableBody.setId("syncTableBody");
+        VBox box = new VBox(9, title, syncTableBody);
+        return box;
+    }
+
+    private void refreshSyncTable() {
+        syncTableBody.getChildren().clear();
+        List<SyncEvent> events = marketService.getRecentSyncs();
+
+        if (events.isEmpty()) {
+            Label empty = new Label("Nenhuma sincronização registrada nesta sessão ainda — clique em "
+                    + "\"Atualizar cotações\" em qualquer tela.");
+            empty.getStyleClass().add("content-card-subtitle");
+            empty.setWrapText(true);
+            syncTableBody.getChildren().add(empty);
+            return;
+        }
+
+        GridPane grid = new GridPane();
+        grid.setId("syncGrid");
+        grid.setHgap(12);
+        grid.getColumnConstraints().addAll(pctColumn(30), pctColumn(28), pctColumn(20), pctColumn(22));
+
+        grid.add(syncHeaderCell("HORÁRIO", HPos.LEFT), 0, 0);
+        grid.add(syncHeaderCell("FONTE", HPos.LEFT), 1, 0);
+        grid.add(syncHeaderCell("ATIVOS", HPos.RIGHT), 2, 0);
+        grid.add(syncHeaderCell("STATUS", HPos.RIGHT), 3, 0);
+
+        DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm", new Locale("pt", "BR")).withZone(ZoneId.systemDefault());
+        for (int i = 0; i < events.size(); i++) {
+            SyncEvent event = events.get(i);
+            int row = i + 1;
+            boolean last = i == events.size() - 1;
+
+            Label timeLabel = syncCell(timeFmt.format(event.timestamp()), HPos.LEFT, last);
+            Label sourceLabel = new Label(event.source());
+            sourceLabel.setStyle("-fx-font-family: 'Manrope'; -fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: -fx-color-text-primary;");
+            sourceLabel.setMaxWidth(Double.MAX_VALUE);
+            styleSyncRow(sourceLabel, last);
+            Label countLabel = syncCell(String.valueOf(event.assetCount()), HPos.RIGHT, last);
+
+            Label statusBadge = new Label(event.success() ? "ok" : "erro");
+            statusBadge.getStyleClass().add(event.success() ? "badge-buy" : "badge-sell");
+            HBox statusBox = new HBox(statusBadge);
+            statusBox.setAlignment(Pos.CENTER_RIGHT);
+            GridPane.setHalignment(statusBox, HPos.RIGHT);
+            styleSyncRow(statusBox, last);
+
+            grid.add(timeLabel, 0, row);
+            grid.add(sourceLabel, 1, row);
+            grid.add(countLabel, 2, row);
+            grid.add(statusBox, 3, row);
+        }
+
+        syncTableBody.getChildren().add(grid);
+    }
+
+    private Label syncHeaderCell(String text, HPos align) {
+        Label label = new Label(text);
+        label.getStyleClass().add("table-header-cell");
+        GridPane.setHalignment(label, align);
+        return label;
+    }
+
+    private Label syncCell(String text, HPos align, boolean last) {
+        Label label = new Label(text);
+        label.getStyleClass().add("table-row-secondary");
+        label.setMaxWidth(Double.MAX_VALUE);
+        GridPane.setHalignment(label, align);
+        styleSyncRow(label, last);
+        return label;
+    }
+
+    private void styleSyncRow(Region node, boolean last) {
+        node.setPadding(new Insets(11, 0, 11, 0));
+        if (!last) {
+            node.getStyleClass().add("table-row-divider");
+        }
     }
 
     private HBox buildFrequencyRow(String name, String description, Node rightControl) {
@@ -565,6 +725,8 @@ public class SettingsView implements ScreenView {
         snapshotEnabledToggle.setOn(Boolean.parseBoolean(settingRepository.get(SETTING_SNAPSHOT_ENABLED, "true")));
         pauseWeekendsToggle.setOn(Boolean.parseBoolean(settingRepository.get(SETTING_PAUSE_WEEKENDS, "true")));
         alertOnFailureToggle.setOn(Boolean.parseBoolean(settingRepository.get(SETTING_ALERT_ON_FAILURE, "false")));
+
+        refreshSyncTable();
 
         statusLabel.setText(" ");
     }

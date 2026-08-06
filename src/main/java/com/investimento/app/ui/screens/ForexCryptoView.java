@@ -8,6 +8,7 @@ import com.investimento.app.dto.PortfolioSummary;
 import com.investimento.app.dto.Position;
 import com.investimento.app.repository.AssetRepository;
 import com.investimento.app.repository.QuoteHistoryRepository;
+import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
 import javafx.beans.binding.Bindings;
@@ -88,6 +89,12 @@ public class ForexCryptoView implements ScreenView {
     private final AssetRepository assetRepository;
     private final QuoteHistoryRepository quoteHistoryRepository;
     private final MarketService marketService;
+    private final SettingRepository settingRepository;
+
+    // "Casas decimais em cripto" (Configurações > Preferências) - recarregado
+    // a cada refresh(), usado só para a quantidade de ativos CRYPTO (câmbio
+    // continua sempre com 2 casas, ver formatQuantity).
+    private int cryptoDecimals = 6;
 
     private final VBox root;
     private final VBox contentBody;
@@ -114,11 +121,13 @@ public class ForexCryptoView implements ScreenView {
     public ForexCryptoView(PositionService positionService,
                             AssetRepository assetRepository,
                             QuoteHistoryRepository quoteHistoryRepository,
-                            MarketService marketService) {
+                            MarketService marketService,
+                            SettingRepository settingRepository) {
         this.positionService = positionService;
         this.assetRepository = assetRepository;
         this.quoteHistoryRepository = quoteHistoryRepository;
         this.marketService = marketService;
+        this.settingRepository = settingRepository;
 
         subtitleLabel = new Label("Cadastre ativos de câmbio ou criptomoeda para começar.");
         subtitleLabel.getStyleClass().add("header-subtitle");
@@ -252,6 +261,9 @@ public class ForexCryptoView implements ScreenView {
     // =====================================================================
 
     private void refresh() {
+        if (settingRepository != null) {
+            cryptoDecimals = parseIntOrDefault(settingRepository.get(SettingsView.SETTING_CRYPTO_DECIMALS, "6"), 6);
+        }
         List<Asset> assets = assetRepository.listAssets(false);
         List<Position> allPositions = positionService.calculateAllPositions(false);
         cachedPositions = allPositions.stream()
@@ -952,9 +964,21 @@ public class ForexCryptoView implements ScreenView {
         return formatDecimal(value, Math.abs(value) >= 100 ? 0 : 2);
     }
 
-    /** Quantidade de cripto usa mais casas decimais (unidades fracionárias) que câmbio. */
-    private static String formatQuantity(double qty, Category category) {
-        return formatDecimal(qty, category == Category.CRYPTO ? 6 : 2);
+    /**
+     * Quantidade de cripto usa mais casas decimais (unidades fracionárias)
+     * que câmbio — {@code cryptoDecimals} vem de "Casas decimais em cripto"
+     * (Configurações > Preferências), recarregado a cada {@link #refresh()}.
+     */
+    private String formatQuantity(double qty, Category category) {
+        return formatDecimal(qty, category == Category.CRYPTO ? cryptoDecimals : 2);
+    }
+
+    private static Integer parseIntOrDefault(String text, int fallback) {
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     private static String formatDecimal(double value, int fractionDigits) {

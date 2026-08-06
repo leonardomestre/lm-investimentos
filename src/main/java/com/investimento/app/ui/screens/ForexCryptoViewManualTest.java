@@ -149,7 +149,7 @@ public final class ForexCryptoViewManualTest {
         AtomicReference<ForexCryptoView> viewRef = new AtomicReference<>();
         AtomicReference<Parent> rootRef = new AtomicReference<>();
         runOnFxAndWait(() -> {
-            ForexCryptoView view = new ForexCryptoView(positionService, assetRepository, quoteHistoryRepository, marketService);
+            ForexCryptoView view = new ForexCryptoView(positionService, assetRepository, quoteHistoryRepository, marketService, null);
             Parent viewRoot = view.getRoot();
             viewRoot.applyCss();
             viewRoot.layout();
@@ -477,6 +477,16 @@ public final class ForexCryptoViewManualTest {
         public Map<Long, Double> getDailyChanges(List<Asset> assets) {
             Asset btc = assets.stream().filter(a -> "BTC".equals(a.getTicker())).findFirst().orElse(null);
             return btc == null ? Map.of() : Map.of(btc.getId(), 4.5);
+        }
+
+        @Override
+        public java.util.Optional<String> getLastFailure() {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public List<com.investimento.app.dto.SyncEvent> getRecentSyncs() {
+            return List.of();
         }
     }
 }

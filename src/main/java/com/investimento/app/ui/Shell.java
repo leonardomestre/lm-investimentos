@@ -2,6 +2,7 @@ package com.investimento.app.ui;
 
 import com.investimento.app.api.brapi.BrapiClient;
 import com.investimento.app.api.coingecko.CoinGeckoClient;
+import com.investimento.app.api.hgbrasil.HgBrasilClient;
 import com.investimento.app.repository.AssetRepository;
 import com.investimento.app.repository.DistributionRepository;
 import com.investimento.app.repository.PortfolioSnapshotRepository;
@@ -52,6 +53,7 @@ public class Shell extends BorderPane {
                  AssetService assetService,
                  TransactionService transactionService,
                  IncomeTaxService incomeTaxService,
+                 HgBrasilClient hgBrasilClient,
                  BrapiClient brapiClient,
                  CoinGeckoClient coinGeckoClient,
                  AssetRepository assetRepository,
@@ -64,15 +66,16 @@ public class Shell extends BorderPane {
                  Screen initialScreen,
                  Runnable onDataRestored) {
         views.put(Screen.DASHBOARD, new DashboardView(marketService, positionService, assetRepository,
-                portfolioSnapshotRepository, rateHistoryRepository, this::select));
+                portfolioSnapshotRepository, rateHistoryRepository, settingRepository, this::select));
         views.put(Screen.STOCKS_FIIS, new StocksFiisView(positionService, assetRepository, quoteHistoryRepository,
                 distributionRepository, marketService));
         views.put(Screen.FIXED_INCOME, new FixedIncomeView(positionService, marketService));
         views.put(Screen.FOREX_CRYPTO, new ForexCryptoView(positionService, assetRepository,
-                quoteHistoryRepository, marketService));
+                quoteHistoryRepository, marketService, settingRepository));
         views.put(Screen.REGISTRATION, new RegistrationView(assetService, transactionService, brapiClient, coinGeckoClient));
         views.put(Screen.TAX_HISTORY, new TaxHistoryView(transactionService, incomeTaxService, positionService, assetService));
-        views.put(Screen.SETTINGS, new SettingsView(settingRepository, backupService, onDataRestored));
+        views.put(Screen.SETTINGS, new SettingsView(settingRepository, backupService, onDataRestored,
+                hgBrasilClient, brapiClient, coinGeckoClient, marketService));
 
         sidebar = new Sidebar(this::select);
         setLeft(sidebar);

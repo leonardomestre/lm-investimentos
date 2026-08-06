@@ -3,10 +3,12 @@ package com.investimento.app.service;
 import com.investimento.app.api.hgbrasil.model.IndicatorPoint;
 import com.investimento.app.api.hgbrasil.model.MacroSnapshot;
 import com.investimento.app.data.model.Asset;
+import com.investimento.app.dto.SyncEvent;
 import javafx.concurrent.Task;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Camada intermediária entre as telas e os 3 clientes de API (ATV-03/04/05) —
@@ -66,4 +68,22 @@ public interface MarketService {
      * pela ATV-12 (Dashboard, "maiores variações do dia").
      */
     Map<Long, Double> getDailyChanges(List<Asset> assets);
+
+    /**
+     * Mensagem da última falha de rede registrada (qualquer uma das 3 APIs),
+     * ou vazio se nenhuma falha ocorreu desde a última busca bem-sucedida da
+     * mesma operação — usado pelo aviso "API falhou" do Dashboard (tela de
+     * Configurações, toggle "Avisar quando a API falhar"). Não persiste entre
+     * aberturas do app (reinicia junto com {@code MarketServiceImpl}).
+     */
+    Optional<String> getLastFailure();
+
+    /**
+     * Últimas tentativas de sincronização por fonte (mais recente primeiro),
+     * só em memória (não persiste entre aberturas do app) — alimenta a tabela
+     * "Últimas sincronizações" da tela de Configurações. Só registra uma
+     * entrada quando a fonte tinha pelo menos 1 ativo a atualizar (mesma
+     * lógica de "nada a fazer" já usada em cada {@code updateXxxAssets}).
+     */
+    List<SyncEvent> getRecentSyncs();
 }

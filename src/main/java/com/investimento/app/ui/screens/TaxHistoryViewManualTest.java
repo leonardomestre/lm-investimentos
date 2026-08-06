@@ -534,5 +534,15 @@ public final class TaxHistoryViewManualTest {
         public Map<Long, Double> getDailyChanges(List<Asset> assets) {
             return Map.of();
         }
+
+        @Override
+        public java.util.Optional<String> getLastFailure() {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public List<com.investimento.app.dto.SyncEvent> getRecentSyncs() {
+            return List.of();
+        }
     }
 }

@@ -14,6 +14,7 @@ import com.investimento.app.dto.Position;
 import com.investimento.app.repository.AssetRepository;
 import com.investimento.app.repository.PortfolioSnapshotRepository;
 import com.investimento.app.repository.RateHistoryRepository;
+import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
 import com.investimento.app.ui.Screen;
@@ -90,27 +91,46 @@ public class DashboardView implements ScreenView {
     private final AssetRepository assetRepository;
     private final PortfolioSnapshotRepository portfolioSnapshotRepository;
     private final RateHistoryRepository rateHistoryRepository;
+    private final SettingRepository settingRepository;
     private final Consumer<Screen> onNavigate;
 
     private final VBox root;
     private final VBox contentBody;
     private final Label subtitleLabel;
+    private final Label failureBanner = new Label();
+
+    // "Ocultar valores no dashboard" (Configurações > Preferências) —
+    // recarregado a cada refresh(), afeta só os helpers formatCurrency/
+    // formatSignedCurrency/formatSignedCurrencyNoDecimals/formatCompactCurrency/
+    // formatSignedNumber (valores monetários), nunca percentuais/quantidades.
+    private boolean hideValues;
 
     public DashboardView(MarketService marketService,
                           PositionService positionService,
                           AssetRepository assetRepository,
                           PortfolioSnapshotRepository portfolioSnapshotRepository,
                           RateHistoryRepository rateHistoryRepository,
+                          SettingRepository settingRepository,
                           Consumer<Screen> onNavigate) {
         this.marketService = marketService;
         this.positionService = positionService;
         this.assetRepository = assetRepository;
         this.portfolioSnapshotRepository = portfolioSnapshotRepository;
         this.rateHistoryRepository = rateHistoryRepository;
+        this.settingRepository = settingRepository;
         this.onNavigate = onNavigate;
 
         subtitleLabel = new Label("Cadastre ativos e clique em \"Atualizar cotações agora\".");
         subtitleLabel.getStyleClass().add("header-subtitle");
+
+        failureBanner.setId("failureBanner");
+        failureBanner.setStyle("-fx-background-color: -fx-color-loss-bg; -fx-background-radius: 10;"
+                + " -fx-padding: 11 13; -fx-font-family: 'Manrope SemiBold'; -fx-font-size: 12px;"
+                + " -fx-text-fill: -fx-color-loss;");
+        failureBanner.setWrapText(true);
+        failureBanner.setMaxWidth(Double.MAX_VALUE);
+        failureBanner.setVisible(false);
+        failureBanner.setManaged(false);
 
         HBox header = buildHeader();
 
@@ -201,6 +221,9 @@ public class DashboardView implements ScreenView {
     // =====================================================================
 
     private void refresh() {
+        hideValues = settingRepository != null
+                && Boolean.parseBoolean(settingRepository.get(SettingsView.SETTING_HIDE_DASHBOARD_VALUES, "false"));
+
         List<Asset> assets = assetRepository.listAssets(false);
         PortfolioSummary summary = positionService.calculatePortfolioSummary();
         List<Position> positions = positionService.calculateAllPositions(false);
@@ -213,13 +236,34 @@ public class DashboardView implements ScreenView {
         List<PortfolioSnapshot> snapshots = portfolioSnapshotRepository.listAll();
 
         subtitleLabel.setText("Última atualização de cotações às " + LocalTime.now().format(TIME_FMT) + " · hoje");
+        refreshFailureBanner();
 
-        contentBody.getChildren().setAll(
+        contentBody.getChildren().setAll(failureBanner,
                 buildKpiRow(macroSnapshot, indicators),
                 buildSummaryAndChartRow(summary, snapshots),
                 buildDiversificationAndGainLossRow(positions),
                 buildTablesRow(positions, dailyChanges)
         );
+    }
+
+    /**
+     * "Avisar quando a API falhar" (Configurações > Atualização de
+     * cotações) — só mostra o banner se o toggle estiver ligado E houver uma
+     * falha registrada por {@link MarketService#getLastFailure()} desde a
+     * última busca bem-sucedida da mesma operação.
+     */
+    private void refreshFailureBanner() {
+        boolean alertEnabled = settingRepository != null
+                && Boolean.parseBoolean(settingRepository.get(SettingsView.SETTING_ALERT_ON_FAILURE, "false"));
+        var failure = alertEnabled ? marketService.getLastFailure() : java.util.Optional.<String>empty();
+        if (failure.isPresent()) {
+            failureBanner.setText("Falha ao buscar cotações — mostrando a última cotação válida conhecida. (" + failure.get() + ")");
+            failureBanner.setVisible(true);
+            failureBanner.setManaged(true);
+        } else {
+            failureBanner.setVisible(false);
+            failureBanner.setManaged(false);
+        }
     }
 
     /**
@@ -229,8 +273,17 @@ public class DashboardView implements ScreenView {
      * {@code PortfolioSnapshotRepository} não tem {@code upsert} (nota da
      * ATV-02/CLAUDE.md) — checa {@code findByDate} antes para decidir entre
      * {@code insert}/{@code update} e evitar {@code UNIQUE constraint failed}.
+     *
+     * <p>Gate "Snapshot diário do patrimônio" (Configurações > Atualização de
+     * cotações): quando desligado, pula a gravação — o gráfico "Evolução do
+     * patrimônio" simplesmente para de ganhar pontos novos enquanto o toggle
+     * estiver desligado.</p>
      */
     private void ensureTodaySnapshot(PortfolioSummary summary) {
+        if (settingRepository != null
+                && !Boolean.parseBoolean(settingRepository.get(SettingsView.SETTING_SNAPSHOT_ENABLED, "true"))) {
+            return;
+        }
         LocalDate today = LocalDate.now();
         PortfolioSnapshot snapshot = PortfolioSnapshot.builder()
                 .date(today)
@@ -885,7 +938,8 @@ public class DashboardView implements ScreenView {
 
             Label ticker = tableCellPrimary(assetLabel(position.asset()), last);
             Label categ = tableCellSecondary(categoryLabelShort(position.asset().category()), last);
-            Label value = tableCellNumericNeutral(formatDecimal(position.currentValue(), 2), last);
+            Label value = tableCellNumericNeutral(
+                    hideValues ? MASKED_VALUE : formatDecimal(position.currentValue(), 2), last);
             Label result = tableCellResult(position.gainLossPercent(), last);
 
             for (Label cell : List.of(ticker, categ, value, result)) {
@@ -1155,22 +1209,40 @@ public class DashboardView implements ScreenView {
         return nf.format(value);
     }
 
-    private static String formatCurrency(double value) {
+    // Placeholder de "ocultar valores no dashboard" - substitui o numero
+    // formatado mas preserva sinal/prefixo, pra nao quebrar o layout
+    // (largura de coluna, alinhamento a direita etc.).
+    private static final String MASKED_VALUE = "••••••";
+
+    private String formatCurrency(double value) {
+        if (hideValues) {
+            return "R$ " + MASKED_VALUE;
+        }
         return "R$ " + formatDecimal(value, 2);
     }
 
-    private static String formatSignedCurrency(double value) {
+    private String formatSignedCurrency(double value) {
         String sign = value < 0 ? "− " : "+ ";
+        if (hideValues) {
+            return sign + "R$ " + MASKED_VALUE;
+        }
         return sign + "R$ " + formatDecimal(Math.abs(value), 2);
     }
 
-    private static String formatSignedCurrencyNoDecimals(double value) {
+    private String formatSignedCurrencyNoDecimals(double value) {
         String sign = value < 0 ? "− " : "+ ";
+        if (hideValues) {
+            return sign + "R$ " + MASKED_VALUE;
+        }
         return sign + "R$ " + formatDecimal(Math.abs(value), 0);
     }
 
-    private static String formatSignedNumber(double value) {
+    /** Usado só para valores monetários (ex.: ganho/perda por categoria) — respeita "ocultar valores". */
+    private String formatSignedNumber(double value) {
         String sign = value < 0 ? "−" : "+";
+        if (hideValues) {
+            return sign + MASKED_VALUE;
+        }
         return sign + formatDecimal(Math.abs(value), 0);
     }
 
@@ -1184,14 +1256,21 @@ public class DashboardView implements ScreenView {
         return sign + formatDecimal(Math.abs(value), 2) + " p.p.";
     }
 
-    private static String formatCompact(double value) {
+    /** Usado nos labels do eixo Y do gráfico de patrimônio — respeita "ocultar valores". */
+    private String formatCompact(double value) {
+        if (hideValues) {
+            return MASKED_VALUE;
+        }
         if (Math.abs(value) >= 1000) {
             return formatDecimal(value / 1000.0, 0) + "k";
         }
         return formatDecimal(value, 0);
     }
 
-    private static String formatCompactCurrency(double value) {
+    private String formatCompactCurrency(double value) {
+        if (hideValues) {
+            return "R$ " + MASKED_VALUE;
+        }
         if (Math.abs(value) >= 1000) {
             return "R$ " + formatDecimal(value / 1000.0, 1) + "k";
         }

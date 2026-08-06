@@ -428,6 +428,106 @@
 }
 
 /* =========================================================
+   Seletor de data (DatePicker)
+
+   O DatePicker recebe a classe .text-field/.text-field-dark (acima) para
+   pintar o campo em si (fundo/borda/radius/fonte), igual ao template
+   (que mostra a data como um campo de texto simples, sem icone). Sem as
+   regras abaixo, o editor interno e o botao de calendario do skin padrao
+   do Modena continuam com o proprio fundo/borda brancos por cima do
+   nosso campo, e o popup do calendario abre com o tema branco/azul padrao
+   do JavaFX — nenhum dos dois bate com o resto da tela.
+   ========================================================= */
+
+.date-picker > .text-field {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+    -fx-font-family: "Manrope Medium";
+    -fx-font-size: 14px;
+    -fx-text-fill: -fx-color-text-disabled;
+}
+.date-picker.text-field-dark > .text-field {
+    -fx-text-fill: white;
+}
+
+.date-picker > .arrow-button {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 0 10 10 0;
+    -fx-padding: 0 10 0 4;
+}
+.date-picker > .arrow-button > .arrow {
+    -fx-background-color: -fx-color-text-muted;
+    -fx-background-insets: 0;
+}
+.date-picker.text-field-dark > .arrow-button > .arrow {
+    -fx-background-color: -fx-color-sidebar-text;
+}
+.date-picker:focused > .arrow-button > .arrow {
+    -fx-background-color: -fx-color-accent;
+}
+
+.date-picker-popup {
+    -fx-background-color: -fx-color-bg-surface;
+    -fx-background-radius: 11;
+    -fx-border-color: -fx-color-border-card;
+    -fx-border-radius: 11;
+    -fx-effect: dropshadow(gaussian, rgba(20,24,26,0.28), 16, 0, 0, 8);
+    -fx-padding: 10;
+}
+.date-picker-popup .spinner .button,
+.date-picker-popup .spinner .button:hover {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+}
+.date-picker-popup .spinner .button:hover {
+    -fx-background-color: -fx-color-bg-surface-tint;
+}
+.date-picker-popup .spinner .label,
+.date-picker-popup .month-year-pane .label {
+    -fx-font-family: "Manrope"; -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: -fx-color-text-primary;
+}
+.date-picker-popup .day-name-cell {
+    -fx-font-family: "IBM Plex Mono SemiBold";
+    -fx-font-size: 10px;
+    -fx-text-fill: -fx-color-text-faint;
+}
+.date-picker-popup .day-cell {
+    -fx-font-family: "Manrope Medium";
+    -fx-font-size: 12px;
+    -fx-text-fill: -fx-color-text-secondary;
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+}
+.date-picker-popup .day-cell:hover {
+    -fx-background-color: -fx-color-bg-surface-tint;
+    -fx-background-radius: 8;
+}
+.date-picker-popup .day-cell:selected {
+    -fx-background-color: -fx-color-accent-strong;
+    -fx-background-radius: 8;
+    -fx-text-fill: white;
+}
+.date-picker-popup .day-cell:selected:hover {
+    -fx-background-color: -fx-color-accent-hover;
+}
+.date-picker-popup .today {
+    -fx-border-color: -fx-color-accent;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+.date-picker-popup .day-cell:disabled,
+.date-picker-popup .next-month,
+.date-picker-popup .previous-month {
+    -fx-text-fill: -fx-color-text-faint;
+    -fx-opacity: 0.5;
+}
+
+/* =========================================================
    Segmented control (ex.: moeda BRL/USD/EUR, Compra/Venda — ATV-13)
    ========================================================= */
 
@@ -444,7 +544,9 @@
 }
 .segmented-option-selected {
     -fx-background-color: -fx-color-text-primary;
+    -fx-background-radius: 10;
     -fx-border-color: transparent;
+    -fx-border-radius: 10;
     -fx-text-fill: white;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
@@ -464,7 +566,9 @@
 }
 .segmented-option-selected-buy {
     -fx-background-color: -fx-color-accent-strong;
+    -fx-background-radius: 10;
     -fx-border-color: transparent;
+    -fx-border-radius: 10;
     -fx-text-fill: white;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
@@ -473,7 +577,9 @@
 }
 .segmented-option-selected-sell {
     -fx-background-color: -fx-color-loss;
+    -fx-background-radius: 10;
     -fx-border-color: transparent;
+    -fx-border-radius: 10;
     -fx-text-fill: white;
     -fx-font-family: "Manrope"; -fx-font-weight: bold;
     -fx-font-size: 13px;
