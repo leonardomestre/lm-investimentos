@@ -48,4 +48,20 @@ public class BackupServiceImpl implements BackupService {
 
         Database.reopen();
     }
+
+    @Override
+    public synchronized void eraseAllData() {
+        Connection conn = Database.getConnection();
+        try (Statement st = conn.createStatement()) {
+            // assets tem ON DELETE CASCADE para transactions/quote_history/
+            // distributions (schema.sql) - apagar assets ja limpa as 3.
+            st.execute("DELETE FROM assets;");
+            st.execute("DELETE FROM rate_history;");
+            st.execute("DELETE FROM indicator_history;");
+            st.execute("DELETE FROM portfolio_snapshot;");
+            st.execute("DELETE FROM settings;");
+        } catch (SQLException e) {
+            throw new RuntimeException("Falha ao apagar todos os dados", e);
+        }
+    }
 }

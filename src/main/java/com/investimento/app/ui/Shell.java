@@ -7,7 +7,9 @@ import com.investimento.app.repository.DistributionRepository;
 import com.investimento.app.repository.PortfolioSnapshotRepository;
 import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.RateHistoryRepository;
+import com.investimento.app.repository.SettingRepository;
 import com.investimento.app.service.AssetService;
+import com.investimento.app.service.BackupService;
 import com.investimento.app.service.IncomeTaxService;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
@@ -56,7 +58,11 @@ public class Shell extends BorderPane {
                  PortfolioSnapshotRepository portfolioSnapshotRepository,
                  RateHistoryRepository rateHistoryRepository,
                  QuoteHistoryRepository quoteHistoryRepository,
-                 DistributionRepository distributionRepository) {
+                 DistributionRepository distributionRepository,
+                 SettingRepository settingRepository,
+                 BackupService backupService,
+                 Screen initialScreen,
+                 Runnable onDataRestored) {
         views.put(Screen.DASHBOARD, new DashboardView(marketService, positionService, assetRepository,
                 portfolioSnapshotRepository, rateHistoryRepository, this::select));
         views.put(Screen.STOCKS_FIIS, new StocksFiisView(positionService, assetRepository, quoteHistoryRepository,
@@ -66,12 +72,12 @@ public class Shell extends BorderPane {
                 quoteHistoryRepository, marketService));
         views.put(Screen.REGISTRATION, new RegistrationView(assetService, transactionService, brapiClient, coinGeckoClient));
         views.put(Screen.TAX_HISTORY, new TaxHistoryView(transactionService, incomeTaxService, positionService, assetService));
-        views.put(Screen.SETTINGS, new SettingsView());
+        views.put(Screen.SETTINGS, new SettingsView(settingRepository, backupService, onDataRestored));
 
         sidebar = new Sidebar(this::select);
         setLeft(sidebar);
 
-        select(Screen.DASHBOARD);
+        select(initialScreen != null ? initialScreen : Screen.DASHBOARD);
     }
 
     private void select(Screen screen) {

@@ -16,6 +16,8 @@ import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.QuoteHistoryRepositoryImpl;
 import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.repository.RateHistoryRepositoryImpl;
+import com.investimento.app.repository.SettingRepository;
+import com.investimento.app.repository.SettingRepositoryImpl;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.MarketServiceImpl;
 import javafx.application.Platform;
@@ -70,6 +72,7 @@ public final class MarketServiceManualTest {
         QuoteHistoryRepository quoteHistoryRepository = new QuoteHistoryRepositoryImpl(conn);
         RateHistoryRepository rateHistoryRepository = new RateHistoryRepositoryImpl(conn);
         IndicatorHistoryRepository indicatorHistoryRepository = new IndicatorHistoryRepositoryImpl(conn);
+        SettingRepository settingRepository = new SettingRepositoryImpl(conn);
 
         HgBrasilClientImpl hgBrasilClient = new HgBrasilClientImpl();
         BrapiClientImpl brapiClient = new BrapiClientImpl();
@@ -77,7 +80,7 @@ public final class MarketServiceManualTest {
 
         MarketService marketService = new MarketServiceImpl(
                 hgBrasilClient, brapiClient, coinGeckoClient,
-                rateHistoryRepository, indicatorHistoryRepository, quoteHistoryRepository);
+                rateHistoryRepository, indicatorHistoryRepository, quoteHistoryRepository, settingRepository);
 
         // ---- Cenario 2: getMacroSnapshot() duas vezes seguidas -> 2a nao gera requisicao nova ----
         System.out.println("=== Cenario 2: cache de getMacroSnapshot() (TTL 5 min) ===");
@@ -186,7 +189,7 @@ public final class MarketServiceManualTest {
         MarketService brokenMarketService = new MarketServiceImpl(
                 new HgBrasilClientImpl("CHAVE_INVALIDA_DE_PROPOSITO"),
                 brapiClient, coinGeckoClient,
-                rateHistoryRepository, indicatorHistoryRepository, quoteHistoryRepository);
+                rateHistoryRepository, indicatorHistoryRepository, quoteHistoryRepository, settingRepository);
         MacroSnapshot brokenSnapshot = brokenMarketService.getMacroSnapshot();
         System.out.println("getMacroSnapshot() com chave invalida devolveu: " + brokenSnapshot
                 + " (esperado null - nunca teve cache valido, nao lancou excecao)");

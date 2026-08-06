@@ -7,6 +7,8 @@ import com.investimento.app.data.model.Category;
 import com.investimento.app.data.model.QuoteSource;
 import com.investimento.app.repository.AssetRepository;
 import com.investimento.app.repository.AssetRepositoryImpl;
+import com.investimento.app.repository.SettingRepository;
+import com.investimento.app.repository.SettingRepositoryImpl;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -183,6 +185,53 @@ public class BackupServiceManualTest {
         }
         System.out.println("[cenario 3] OK — apos restoreBackup: ATV19NEW sumiu, ATV19OLD continua presente"
                 + " (prova que a restauracao substituiu o banco de verdade, nao so copiou por cima sem efeito)");
+
+        // Cenario 4 (ATV-18 — zona de perigo "Apagar todos os dados"):
+        // eraseAllData() apaga assets/settings (e, por ON DELETE CASCADE,
+        // transactions/quote_history/distributions), SEM fechar/reabrir a
+        // conexao — diferente de restoreBackup, a mesma Connection/repository
+        // ja construidos continuam validos depois de chamar isto.
+        SettingRepository settingRepository = new SettingRepositoryImpl(reopened);
+        Asset beforeErase = assetRepositoryAfterRestore.insert(Asset.builder()
+                .type(AssetType.STOCK)
+                .category(Category.STOCKS)
+                .ticker("ATV19ERASE")
+                .displayName("ATV-18 Teste - sera apagado")
+                .currency("BRL")
+                .quoteSource(QuoteSource.MANUAL)
+                .active(true)
+                .build());
+        settingRepository.save("hgbrasil.apiKey", "chave-de-teste-sera-apagada");
+        System.out.println("[cenario 4] ativo (id=" + beforeErase.getId() + ") e setting inseridos antes do eraseAllData()");
+
+        backupService.eraseAllData();
+        System.out.println("[cenario 4] eraseAllData() concluido");
+
+        boolean assetStillPresent = findByTicker(assetRepositoryAfterRestore, "ATV19ERASE").isPresent();
+        if (assetStillPresent) {
+            throw new AssertionError("ATV19ERASE deveria ter sumido apos eraseAllData()");
+        }
+        String settingAfterErase = settingRepository.get("hgbrasil.apiKey", null);
+        if (settingAfterErase != null) {
+            throw new AssertionError("settings.hgbrasil.apiKey deveria ter sido apagado, veio: " + settingAfterErase);
+        }
+        // Confirma que a MESMA Connection (reopened) continua valida depois de
+        // eraseAllData() - diferente de restoreBackup, nao houve reopen aqui,
+        // entao um novo insert pela MESMA instancia de repository precisa funcionar.
+        Asset afterErase = assetRepositoryAfterRestore.insert(Asset.builder()
+                .type(AssetType.STOCK)
+                .category(Category.STOCKS)
+                .ticker("ATV19POSERASE")
+                .displayName("ATV-18 Teste - apos eraseAllData")
+                .currency("BRL")
+                .quoteSource(QuoteSource.MANUAL)
+                .active(true)
+                .build());
+        if (afterErase.getId() == null) {
+            throw new AssertionError("insert apos eraseAllData() deveria funcionar normalmente (mesma conexao, sem reopen)");
+        }
+        System.out.println("[cenario 4] OK — assets/settings apagados, e a MESMA conexao/repository continuam"
+                + " funcionais depois (novo insert id=" + afterErase.getId() + "), sem precisar de restart/reopen");
 
         // Limpa os ativos de teste da conexao reaberta (fica dentro do
         // arquivo .db real ate o bloco finally do main() restaurar o

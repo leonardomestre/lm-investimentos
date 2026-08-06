@@ -20,6 +20,7 @@ import com.investimento.app.data.model.RateHistory;
 import com.investimento.app.repository.IndicatorHistoryRepository;
 import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.RateHistoryRepository;
+import com.investimento.app.repository.SettingRepository;
 import javafx.concurrent.Task;
 
 import java.time.Duration;
@@ -43,6 +44,16 @@ public class MarketServiceImpl implements MarketService {
     private static final Duration BRAPI_QUOTE_TTL = Duration.ofMinutes(15);
     private static final Duration COINGECKO_QUOTE_TTL = Duration.ofMinutes(5);
 
+    /**
+     * Chave em {@code settings} (ATV-18) que sobrescreve
+     * {@link #BRAPI_QUOTE_TTL}/{@link #COINGECKO_QUOTE_TTL} — "intervalo de
+     * atualização automática de cotações", em minutos. {@link #MACRO_TTL}/
+     * {@link #INDICATORS_TTL} (painel macro/indicadores da HG Brasil) não são
+     * afetados — a ATV-18 fala especificamente de "cotações", não do painel
+     * macro/indicadores.
+     */
+    static final String SETTING_UPDATE_INTERVAL_MINUTES = "updateIntervalMinutes";
+
     private static final String[] INDICATOR_TICKERS = {"IBGE:IPCA", "BCB:SELICMETA"};
 
     private final HgBrasilClient hgBrasilClient;
@@ -51,6 +62,7 @@ public class MarketServiceImpl implements MarketService {
     private final RateHistoryRepository rateHistoryRepository;
     private final IndicatorHistoryRepository indicatorHistoryRepository;
     private final QuoteHistoryRepository quoteHistoryRepository;
+    private final SettingRepository settingRepository;
 
     // Cache em memoria do painel macro (moedas/indices/CDI-SELIC do dia) - nao
     // ha tabela dedicada para moedas/indices (nota da ATV-06); so o CDI/SELIC
@@ -77,13 +89,15 @@ public class MarketServiceImpl implements MarketService {
                               CoinGeckoClient coinGeckoClient,
                               RateHistoryRepository rateHistoryRepository,
                               IndicatorHistoryRepository indicatorHistoryRepository,
-                              QuoteHistoryRepository quoteHistoryRepository) {
+                              QuoteHistoryRepository quoteHistoryRepository,
+                              SettingRepository settingRepository) {
         this.hgBrasilClient = hgBrasilClient;
         this.brapiClient = brapiClient;
         this.coinGeckoClient = coinGeckoClient;
         this.rateHistoryRepository = rateHistoryRepository;
         this.indicatorHistoryRepository = indicatorHistoryRepository;
         this.quoteHistoryRepository = quoteHistoryRepository;
+        this.settingRepository = settingRepository;
     }
 
     @Override
@@ -236,7 +250,7 @@ public class MarketServiceImpl implements MarketService {
     private void updateBrapiAssets(List<Asset> assets) {
         List<Asset> brapiAssets = assets.stream()
                 .filter(a -> a.getQuoteSource() == QuoteSource.BRAPI)
-                .filter(a -> needsRefresh(a.getId(), BRAPI_QUOTE_TTL))
+                .filter(a -> needsRefresh(a.getId(), configuredQuoteTtl(BRAPI_QUOTE_TTL)))
                 .toList();
         if (brapiAssets.isEmpty()) {
             return;
@@ -274,7 +288,7 @@ public class MarketServiceImpl implements MarketService {
     private void updateCoinGeckoAssets(List<Asset> assets) {
         List<Asset> cryptoAssets = assets.stream()
                 .filter(a -> a.getQuoteSource() == QuoteSource.COINGECKO)
-                .filter(a -> needsRefresh(a.getId(), COINGECKO_QUOTE_TTL))
+                .filter(a -> needsRefresh(a.getId(), configuredQuoteTtl(COINGECKO_QUOTE_TTL)))
                 .toList();
         if (cryptoAssets.isEmpty()) {
             return;
@@ -384,6 +398,33 @@ public class MarketServiceImpl implements MarketService {
     }
 
     // ---- TTL / resiliencia ------------------------------------------------
+
+    /**
+     * ATV-18: {@code settings.updateIntervalMinutes}, quando presente e
+     * válido (número &gt; 0, minutos — aceita fração para permitir testes
+     * automatizados rápidos sem esperar minutos inteiros), sobrescreve o TTL
+     * padrão passado em {@code defaultTtl} (BRAPI 15 min / COINGECKO 5 min).
+     * Sem configuração (ou valor inválido/≤0), usa o TTL padrão da ATV-06
+     * sem alteração nenhuma.
+     */
+    private Duration configuredQuoteTtl(Duration defaultTtl) {
+        if (settingRepository == null) {
+            return defaultTtl;
+        }
+        String raw = settingRepository.get(SETTING_UPDATE_INTERVAL_MINUTES, null);
+        if (raw == null || raw.isBlank()) {
+            return defaultTtl;
+        }
+        try {
+            double minutes = Double.parseDouble(raw.trim());
+            if (minutes <= 0) {
+                return defaultTtl;
+            }
+            return Duration.ofMillis(Math.round(minutes * 60_000));
+        } catch (NumberFormatException e) {
+            return defaultTtl;
+        }
+    }
 
     private boolean needsRefresh(Long assetId, Duration ttl) {
         Instant last = lastQuoteFetch.get(assetId);
