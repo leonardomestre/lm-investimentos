@@ -8,6 +8,7 @@ import com.investimento.app.repository.PortfolioSnapshotRepository;
 import com.investimento.app.repository.QuoteHistoryRepository;
 import com.investimento.app.repository.RateHistoryRepository;
 import com.investimento.app.service.AssetService;
+import com.investimento.app.service.IncomeTaxService;
 import com.investimento.app.service.MarketService;
 import com.investimento.app.service.PositionService;
 import com.investimento.app.service.TransactionService;
@@ -48,6 +49,7 @@ public class Shell extends BorderPane {
                  PositionService positionService,
                  AssetService assetService,
                  TransactionService transactionService,
+                 IncomeTaxService incomeTaxService,
                  BrapiClient brapiClient,
                  CoinGeckoClient coinGeckoClient,
                  AssetRepository assetRepository,
@@ -63,7 +65,7 @@ public class Shell extends BorderPane {
         views.put(Screen.FOREX_CRYPTO, new ForexCryptoView(positionService, assetRepository,
                 quoteHistoryRepository, marketService));
         views.put(Screen.REGISTRATION, new RegistrationView(assetService, transactionService, brapiClient, coinGeckoClient));
-        views.put(Screen.TAX_HISTORY, new TaxHistoryView());
+        views.put(Screen.TAX_HISTORY, new TaxHistoryView(transactionService, incomeTaxService, positionService, assetService));
         views.put(Screen.SETTINGS, new SettingsView());
 
         sidebar = new Sidebar(this::select);
