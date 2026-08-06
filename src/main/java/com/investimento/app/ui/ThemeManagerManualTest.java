@@ -45,6 +45,7 @@ public final class ThemeManagerManualTest {
             scenario3SettingValueRoundTrip();
             scenario4StylesheetSwap();
             scenario5RenderedColorChanges();
+            scenario6FormFieldLegibilityInDark();
         } finally {
             Platform.exit();
         }
@@ -255,6 +256,67 @@ public final class ThemeManagerManualTest {
             root.applyCss();
             check(sameRgb((Color) kpi.getTextFill(), lightText), "voltar para o tema claro restaura a cor original");
         });
+    }
+
+    // =====================================================================
+    // Cenario 6 — legibilidade de campo de formulario no tema escuro
+    // =====================================================================
+
+    /**
+     * Guarda de regressao para um bug real do tema escuro: o placeholder dos
+     * campos saia quase preto.
+     *
+     * <p>Causa: {@code -fx-prompt-text-fill} do Modena e
+     * {@code derive(-fx-control-inner-background, -30%)} — "o proprio fundo,
+     * 30% mais escuro". Sobre o branco do tema claro isso da um cinza claro
+     * correto por acaso; sobre o fundo escuro dava quase preto. A correcao foi
+     * declarar {@code -fx-prompt-text-fill} explicitamente via token, em vez de
+     * herdar a derivacao do Modena.</p>
+     *
+     * <p>O teste nao mede o {@code promptTextFill} renderizado porque ele vive
+     * no {@code TextInputControlSkin}, sem API publica no {@code TextField}.
+     * Em vez disso afirma a <b>hierarquia de brilho</b> dos 4 tokens
+     * envolvidos, que e o que o bug quebrava: fundo &lt; placeholder &lt;
+     * texto digitado &lt; texto de maior enfase.</p>
+     */
+    private static void scenario6FormFieldLegibilityInDark() throws IOException {
+        System.out.println("\n== Cenario 6: campo de formulario legivel no tema escuro ==");
+
+        double surface = brightnessOf("/theme-dark.css", "-fx-color-bg-surface");
+        double placeholder = brightnessOf("/theme-dark.css", "-fx-color-text-placeholder");
+        double typed = brightnessOf("/theme-dark.css", "-fx-color-text-disabled");
+        double primary = brightnessOf("/theme-dark.css", "-fx-color-text-primary");
+
+        System.out.println("  brilho: fundo=" + round(surface) + " placeholder=" + round(placeholder)
+                + " digitado=" + round(typed) + " primario=" + round(primary));
+
+        // O bug: placeholder mais escuro que o proprio fundo do campo.
+        check(placeholder > surface + 0.3,
+                "placeholder e bem mais claro que o fundo do campo (era quase preto sobre fundo escuro)");
+        check(placeholder > 0.6, "placeholder e claro o bastante para ser lido (brilho " + round(placeholder) + ")");
+        // O texto que o usuario digitou nunca pode ser menos visivel que a
+        // dica que ele substituiu.
+        check(typed > placeholder, "texto digitado e mais claro que o placeholder");
+        check(primary > typed, "texto de maior enfase continua acima do texto de campo");
+
+        // No tema claro a ordem e a inversa (texto escuro sobre fundo claro) —
+        // confirma que o par nao foi copiado do escuro por engano.
+        double lightSurface = brightnessOf("/theme.css", "-fx-color-bg-surface");
+        double lightPlaceholder = brightnessOf("/theme.css", "-fx-color-text-placeholder");
+        check(lightPlaceholder < lightSurface - 0.2,
+                "no tema claro o placeholder e mais escuro que o fundo branco");
+    }
+
+    private static double brightnessOf(String resource, String token) throws IOException {
+        String value = colorValue(resource, token);
+        if (value.isEmpty()) {
+            throw new IOException("token " + token + " nao encontrado em " + resource);
+        }
+        return Color.web(value).getBrightness();
+    }
+
+    private static double round(double value) {
+        return Math.round(value * 100) / 100.0;
     }
 
     // =====================================================================

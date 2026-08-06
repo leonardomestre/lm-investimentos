@@ -35,7 +35,20 @@
     -fx-color-text-muted:     #98a1a6;
     -fx-color-text-faint:     #828b90;
     -fx-color-text-eyebrow:   #9aa3a8;
-    -fx-color-text-disabled:  #6c7478;
+    /* Apesar do nome, o unico uso deste token no theme.css e o TEXTO DIGITADO
+       de um campo de formulario (.text-field e o editor do .date-picker) — no
+       template o campo preenchido tem enfase baixa. Manter o equivalente
+       literal do claro (#a9aeb1 escurecido) deixaria o valor que o usuario
+       digitou menos legivel que o proprio placeholder, invertendo a
+       hierarquia. Aqui ele fica claro o suficiente para ser lido, e ainda um
+       degrau abaixo de text-primary. */
+    -fx-color-text-disabled:  #dde2e4;
+    /* Placeholder bem claro, quase branco — o oposto do que o padrao do
+       Modena produziria aqui (o proprio fundo escuro, 30% mais escuro ainda,
+       ou seja quase preto). Nao e #ffffff de proposito: o valor digitado e
+       text-primary (#f2f4f4), e um placeholder identico ao texto real
+       deixaria de parecer placeholder. */
+    -fx-color-text-placeholder: #b6bfc4;
 
     /* ---------- Sidebar ----------
        A sidebar ja era escura no tema claro (area de tema escuro fixo do
