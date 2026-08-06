@@ -225,13 +225,15 @@ public class DashboardView implements ScreenView {
                 && Boolean.parseBoolean(settingRepository.get(SettingsView.SETTING_HIDE_DASHBOARD_VALUES, "false"));
 
         List<Asset> assets = assetRepository.listAssets(false);
-        PortfolioSummary summary = positionService.calculatePortfolioSummary();
         List<Position> positions = positionService.calculateAllPositions(false);
+        PortfolioSummary summary = positionService.calculatePortfolioSummary(positions);
 
         ensureTodaySnapshot(summary);
 
-        MacroSnapshot macroSnapshot = marketService.getMacroSnapshot();
-        Map<String, List<IndicatorPoint>> indicators = marketService.getIndicators();
+        // Cache puro, sem rede: este metodo roda na FX thread. A busca de fato
+        // acontece em refreshMacroPanelAsync(), no fim deste metodo.
+        MacroSnapshot macroSnapshot = marketService.getCachedMacroSnapshot();
+        Map<String, List<IndicatorPoint>> indicators = marketService.getCachedIndicators();
         Map<Long, Double> dailyChanges = marketService.getDailyChanges(assets);
         List<PortfolioSnapshot> snapshots = portfolioSnapshotRepository.listAll();
 
@@ -244,6 +246,45 @@ public class DashboardView implements ScreenView {
                 buildDiversificationAndGainLossRow(positions),
                 buildTablesRow(positions, dailyChanges)
         );
+
+        refreshMacroPanelAsync();
+    }
+
+    /**
+     * Renova o painel macro (moedas/índices/IPCA/SELIC) fora da FX thread e
+     * redesenha só a linha de KPIs quando a resposta chega.
+     *
+     * <p>Antes, {@code refresh()} chamava {@code getMacroSnapshot()}/{@code
+     * getIndicators()} direto: com o cache vencido (TTL de 5 min / 6 h), abrir
+     * ou voltar para o Dashboard disparava uma requisição HTTP síncrona na
+     * thread da interface e a janela ficava congelada até a resposta — ou até o
+     * timeout do cliente, se a rede não respondesse.</p>
+     *
+     * <p>Os dois métodos já tratam falha internamente devolvendo o último valor
+     * conhecido, então não há {@code setOnFailed}: se a busca não deu certo, o
+     * painel simplesmente continua mostrando o que já estava desenhado, e o
+     * banner de falha (quando ligado nas Configurações) explica o motivo.</p>
+     */
+    private void refreshMacroPanelAsync() {
+        Task<Void> task = new Task<>() {
+            @Override
+            protected Void call() {
+                marketService.getMacroSnapshot();
+                marketService.getIndicators();
+                return null;
+            }
+        };
+        task.setOnSucceeded(ev -> {
+            if (contentBody.getChildren().size() > 1) {
+                contentBody.getChildren().set(1, buildKpiRow(
+                        marketService.getCachedMacroSnapshot(),
+                        marketService.getCachedIndicators()));
+            }
+            refreshFailureBanner();
+        });
+        Thread thread = new Thread(task, "macro-panel-dashboard");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     /**

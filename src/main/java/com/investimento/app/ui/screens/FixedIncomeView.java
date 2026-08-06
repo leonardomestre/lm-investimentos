@@ -10,6 +10,7 @@ import com.investimento.app.service.PositionService;
 import com.investimento.app.ui.CurrencyDisplay;
 import com.investimento.app.ui.Theme;
 import com.investimento.app.ui.ThemeManager;
+import javafx.concurrent.Task;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -169,14 +170,21 @@ public class FixedIncomeView implements ScreenView {
     // =====================================================================
 
     private void refresh() {
-        // Atualiza CDI/SELIC (rate_history) e IPCA (indicator_history), usados
-        // pela formula de juros compostos - sincrono, mesmo padrao ja usado
-        // por DashboardView.refresh() (ATV-12): cada metodo respeita seu
-        // proprio TTL em memoria (5 min / 6h), entao cliques repetidos em
-        // "Recalcular projeções" nao custam requisicao de rede toda vez.
-        marketService.getMacroSnapshot();
-        marketService.getIndicators();
+        refresh(true);
+    }
 
+    /**
+     * @param warmRatesInBackground dispara a renovação de CDI/SELIC/IPCA em
+     *                              background ao final. Falso apenas no
+     *                              redesenho que a própria renovação agenda —
+     *                              sem esse corte, cada redesenho pediria uma
+     *                              nova renovação, indefinidamente.
+     */
+    private void refresh(boolean warmRatesInBackground) {
+        // Projeção calculada a partir de rate_history/indicator_history, que
+        // sao tabelas do banco: os valores da ultima busca bem-sucedida
+        // continuam la entre aberturas do app, entao ha o que desenhar antes
+        // de qualquer rede.
         cachedPositions = positionService.calculateAllPositions(false).stream()
                 .filter(p -> p.asset().category() == Category.FIXED_INCOME)
                 .sorted(Comparator.comparing(
@@ -197,6 +205,37 @@ public class FixedIncomeView implements ScreenView {
                 + " · projeção recalculada com Selic e CDI de hoje");
 
         renderAll();
+
+        if (warmRatesInBackground) {
+            warmRatesAsync();
+        }
+    }
+
+    /**
+     * Renova CDI/SELIC ({@code rate_history}) e IPCA ({@code
+     * indicator_history}) fora da FX thread e redesenha a projeção quando os
+     * valores novos já estão gravados.
+     *
+     * <p>Estas duas chamadas eram síncronas dentro de {@code refresh()}: com o
+     * cache vencido, abrir a tela ou clicar em "Recalcular projeções"
+     * disparava uma requisição HTTP na thread da interface e a janela ficava
+     * congelada até a resposta. As duas já tratam falha internamente
+     * (mantendo o último valor conhecido), então não há {@code setOnFailed} —
+     * a projeção segue desenhada com as taxas que já estavam no banco.</p>
+     */
+    private void warmRatesAsync() {
+        Task<Void> task = new Task<>() {
+            @Override
+            protected Void call() {
+                marketService.getMacroSnapshot();
+                marketService.getIndicators();
+                return null;
+            }
+        };
+        task.setOnSucceeded(ev -> refresh(false));
+        Thread thread = new Thread(task, "rates-fixed-income");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void renderAll() {

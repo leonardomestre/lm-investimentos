@@ -44,6 +44,20 @@ public interface PositionService {
     PortfolioSummary calculatePortfolioSummary();
 
     /**
+     * Mesmo resumo de {@link #calculatePortfolioSummary()}, mas a partir de
+     * posições <b>já calculadas</b>.
+     *
+     * <p>Existe porque as telas normalmente já chamaram {@link
+     * #calculateAllPositions(boolean)} para montar suas tabelas — e a versão
+     * sem argumento recalcula tudo por dentro, dobrando o trabalho (cada
+     * posição custa consultas de transações e de cotação). Passe aqui a lista
+     * <b>completa</b> devolvida por {@code calculateAllPositions(false)}, nunca
+     * um subconjunto filtrado por categoria: o resumo representa a carteira
+     * inteira, e é sobre ele que as telas calculam "% da carteira".</p>
+     */
+    PortfolioSummary calculatePortfolioSummary(List<Position> positions);
+
+    /**
      * Ganho/perda realizado de cada venda ({@code SELL}) de um ativo, na
      * ordem cronológica, com o preço médio vigente no momento de cada venda.
      * Reaproveita o MESMO caminho de custo médio de {@link

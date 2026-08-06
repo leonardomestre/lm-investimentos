@@ -483,6 +483,17 @@ public final class FixedIncomeViewManualTest {
             return Map.of();
         }
 
+        // Fake sem cache nem rede: a versao cacheada e a mesma resposta fixa.
+        @Override
+        public MacroSnapshot getCachedMacroSnapshot() {
+            return getMacroSnapshot();
+        }
+
+        @Override
+        public Map<String, List<IndicatorPoint>> getCachedIndicators() {
+            return getIndicators();
+        }
+
         @Override
         public Task<Void> updateQuotes(List<Asset> assets) {
             return new Task<>() {

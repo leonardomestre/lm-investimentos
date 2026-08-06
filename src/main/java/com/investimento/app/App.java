@@ -130,11 +130,14 @@ public class App extends Application {
         DistributionRepository distributionRepository = new DistributionRepositoryImpl(connection);
         SettingRepository settingRepository = new SettingRepositoryImpl(connection);
 
-        // ATV-18: settings (banco) > variavel de ambiente > fallback do
-        // projeto - mesmos fallbacks ja usados pelos construtores sem
-        // argumento de HgBrasilClientImpl/BrapiClientImpl (ATV-03/04).
-        String hgBrasilKey = ApiKeyResolver.resolve(settingRepository, "hgbrasil.apiKey", "HG_BRASIL_KEY", "ee3b78db");
-        String brapiToken = ApiKeyResolver.resolve(settingRepository, "brapi.token", "BRAPI_TOKEN", "jS1ByoxrxvQAaFBZmcZMU6");
+        // ATV-18: settings (banco, tela de Configuracoes) > variavel de
+        // ambiente. NAO existe mais fallback embutido: este repositorio e
+        // publico, entao uma chave literal aqui e uma credencial vazada. Sem
+        // nenhuma das 2 fontes, o cliente lanca a excecao de dominio com uma
+        // mensagem dizendo onde configurar, e o app segue funcionando no que
+        // nao depende de rede (ver HgBrasilClientImpl/BrapiClientImpl).
+        String hgBrasilKey = ApiKeyResolver.resolve(settingRepository, "hgbrasil.apiKey", "HG_BRASIL_KEY", null);
+        String brapiToken = ApiKeyResolver.resolve(settingRepository, "brapi.token", "BRAPI_TOKEN", null);
 
         HgBrasilClient hgBrasilClient = new HgBrasilClientImpl(hgBrasilKey);
         BrapiClient brapiClient = new BrapiClientImpl(brapiToken);

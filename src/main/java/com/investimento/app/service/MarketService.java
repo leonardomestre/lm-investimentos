@@ -33,6 +33,19 @@ public interface MarketService {
     MacroSnapshot getMacroSnapshot();
 
     /**
+     * Igual a {@link #getMacroSnapshot()}, porém <strong>nunca toca a
+     * rede</strong>: devolve só o que já está em memória ({@code null} se
+     * nada foi buscado com sucesso ainda), mesmo que o TTL já tenha vencido.
+     *
+     * <p>É esta a versão que a UI thread deve usar. {@link #getMacroSnapshot()}
+     * bloqueia a thread chamadora pelo tempo da requisição HTTP quando o cache
+     * está vencido — na FX thread isso trava a janela. O padrão correto numa
+     * tela é: desenhar com o valor cacheado, disparar {@link #getMacroSnapshot()}
+     * dentro de um {@link Task} e redesenhar em {@code setOnSucceeded}.</p>
+     */
+    MacroSnapshot getCachedMacroSnapshot();
+
+    /**
      * Cache em memória (TTL 6h) de IPCA + meta SELIC (séries completas).
      * Grava a série completa em {@code indicator_history} via upsert a cada
      * busca bem-sucedida.
@@ -41,6 +54,13 @@ public interface MarketService {
      * devolve um mapa vazio.
      */
     Map<String, List<IndicatorPoint>> getIndicators();
+
+    /**
+     * Igual a {@link #getIndicators()}, porém <strong>nunca toca a rede</strong>
+     * — devolve o cache atual (mapa vazio se nada foi buscado ainda). Ver a
+     * nota de uso em {@link #getCachedMacroSnapshot()}.
+     */
+    Map<String, List<IndicatorPoint>> getCachedIndicators();
 
     /**
      * Roda em background ({@link javafx.concurrent.Task}) — atualiza a

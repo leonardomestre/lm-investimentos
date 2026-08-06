@@ -268,7 +268,10 @@ public class StocksFiisView implements ScreenView {
                 .sorted(Comparator.comparing((Position p) -> p.asset().category())
                         .thenComparing(Comparator.comparingDouble(Position::currentValue).reversed()))
                 .toList();
-        cachedSummary = positionService.calculatePortfolioSummary();
+        // Resumo montado sobre allPositions (carteira inteira, nao a lista ja
+        // filtrada por categoria) — a versao sem argumento recalcularia todas
+        // as posicoes de novo.
+        cachedSummary = positionService.calculatePortfolioSummary(allPositions);
         cachedDailyChanges = marketService.getDailyChanges(assets);
 
         if (selectedAssetId == null || cachedPositions.stream().noneMatch(p -> p.asset().id().equals(selectedAssetId))) {

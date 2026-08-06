@@ -210,7 +210,7 @@ public final class TaxHistoryViewManualTest {
         assertEquals("FIIs", cellText(grid, 0, 2), "2a linha deveria ser FIIs");
         assertEquals("1.000,00", cellText(grid, 1, 2), "vendas de FIIs no ano (500+500)");
         assertEquals("−400,00", cellText(grid, 2, 2), "resultado de FIIs no ano (100-500)");
-        assertEquals("15,00", cellText(grid, 3, 2), "imposto de FIIs no ano (15+0)");
+        assertEquals("20,00", cellText(grid, 3, 2), "imposto de FIIs no ano (20+0 — FII e tributado a 20%)");
 
         assertEquals("Criptomoedas", cellText(grid, 0, 3), "3a linha deveria ser Criptomoedas");
         assertEquals("40.000,00", cellText(grid, 1, 3), "vendas de Cripto no ano");
@@ -218,10 +218,10 @@ public final class TaxHistoryViewManualTest {
         assertEquals("300,00", cellText(grid, 3, 3), "imposto de Cripto no ano");
 
         Label totalLabel = (Label) findNode(root, "#annualSummaryTotalLabel");
-        assertTrue(totalLabel.getText().contains("765,00"),
-                "imposto total do periodo deveria ser 765,00 (450+15+300), veio: " + totalLabel.getText());
+        assertTrue(totalLabel.getText().contains("770,00"),
+                "imposto total do periodo deveria ser 770,00 (450+20+300), veio: " + totalLabel.getText());
 
-        System.out.println("[OK] cenario 2 (resumo consolidado bate com ATV-11): Acoes 450, FIIs 15, Cripto 300, total 765");
+        System.out.println("[OK] cenario 2 (resumo consolidado bate com ATV-11): Acoes 450, FIIs 20, Cripto 300, total 770");
     }
 
     // =====================================================================
@@ -235,7 +235,7 @@ public final class TaxHistoryViewManualTest {
         GridPane grid = (GridPane) findNode(root, "#taxAssessmentGrid");
         assertEquals("Março", cellText(grid, 0, 1), "1a linha de FIIs deveria ser Marco");
         assertEquals("Tributável", cellText(grid, 2, 1), "FII sempre tributavel, mesmo com venda pequena");
-        assertEquals("15,00", cellText(grid, 4, 1), "imposto de Marco (FII, 15% de 100)");
+        assertEquals("20,00", cellText(grid, 4, 1), "imposto de Marco (FII, 20% de 100 — aliquota de FII, nao 15%)");
 
         assertEquals("Maio", cellText(grid, 0, 2), "2a linha de FIIs deveria ser Maio");
         assertEquals("Tributável", cellText(grid, 2, 2), "FII com prejuizo continua exempt=false (so taxDue=0)");
@@ -508,6 +508,17 @@ public final class TaxHistoryViewManualTest {
         @Override
         public Map<String, List<IndicatorPoint>> getIndicators() {
             return Map.of();
+        }
+
+        // Fake sem cache nem rede: a versao cacheada e a mesma resposta fixa.
+        @Override
+        public MacroSnapshot getCachedMacroSnapshot() {
+            return getMacroSnapshot();
+        }
+
+        @Override
+        public Map<String, List<IndicatorPoint>> getCachedIndicators() {
+            return getIndicators();
         }
 
         @Override

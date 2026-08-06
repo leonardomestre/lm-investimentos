@@ -60,7 +60,11 @@ public class PositionServiceImpl implements PositionService {
 
     @Override
     public Position calculatePosition(long assetId) {
-        Asset asset = findAssetOrThrow(assetId);
+        return calculatePosition(findAssetOrThrow(assetId));
+    }
+
+    private Position calculatePosition(Asset asset) {
+        long assetId = asset.getId();
         List<Transaction> transactions = transactionRepository.listByAsset(assetId);
 
         CostBasisWalk walk = walkCostBasis(asset, transactions);
@@ -86,15 +90,23 @@ public class PositionServiceImpl implements PositionService {
 
     @Override
     public List<Position> calculateAllPositions(boolean includeZeroed) {
+        // Reaproveita o Asset que listAssets ja trouxe, em vez de chamar
+        // calculatePosition(id) e fazer o repositorio buscar de novo, um
+        // findById por ativo, o que dobrava as consultas so para reler linhas
+        // que ja estavam em maos.
         return assetRepository.listAssets(false).stream()
-                .map(asset -> calculatePosition(asset.getId()))
+                .map(this::calculatePosition)
                 .filter(position -> includeZeroed || position.currentQuantity() > 0)
                 .toList();
     }
 
     @Override
     public PortfolioSummary calculatePortfolioSummary() {
-        List<Position> positions = calculateAllPositions(false);
+        return calculatePortfolioSummary(calculateAllPositions(false));
+    }
+
+    @Override
+    public PortfolioSummary calculatePortfolioSummary(List<Position> positions) {
         double totalInvested = positions.stream().mapToDouble(Position::investedValue).sum();
         double totalCurrent = positions.stream().mapToDouble(Position::currentValue).sum();
         double gainLossAmount = totalCurrent - totalInvested;
@@ -248,8 +260,21 @@ public class PositionServiceImpl implements PositionService {
                 ));
                 // Reduz accumulatedCost/currentQuantity proporcionalmente -
                 // o preço médio NÃO muda numa venda (RF06/ATV-10).
-                accumulatedCost -= currentAveragePrice * transaction.getQuantity();
-                currentQuantity -= transaction.getQuantity();
+                //
+                // A baixa e limitada ao que existe em carteira. TransactionService
+                // nao valida saldo ao cadastrar uma venda (decisao registrada la),
+                // entao uma venda maior que a posicao - digitacao errada, ou
+                // compra antiga que o usuario ainda nao cadastrou - deixava
+                // quantidade e custo NEGATIVOS. Isso nao ficava contido no ativo:
+                // investedValue negativo entra na soma de calculatePortfolioSummary
+                // e reduz o total investido da carteira inteira, e o
+                // gainLossPercent do ativo passa a ser calculado sobre uma base
+                // negativa. A venda em si continua registrada integralmente na
+                // lista de RealizedSale (o relatorio de IR usa a quantidade que o
+                // usuario informou); o que se limita aqui e so a baixa de estoque.
+                double soldFromPosition = Math.min(transaction.getQuantity(), Math.max(currentQuantity, 0));
+                accumulatedCost = Math.max(accumulatedCost - currentAveragePrice * soldFromPosition, 0);
+                currentQuantity = Math.max(currentQuantity - soldFromPosition, 0);
             }
         }
 
@@ -275,14 +300,20 @@ public class PositionServiceImpl implements PositionService {
         };
     }
 
-    /** Último preço de {@code quote_history} para o ativo (0 se ainda não há nenhuma linha). */
+    /**
+     * Último preço de {@code quote_history} para o ativo (0 se ainda não há
+     * nenhuma linha).
+     *
+     * <p>Usa {@code findLatestByAsset} (1 linha) e não {@code listByAsset}: o
+     * seed inicial grava a série completa da brapi ({@code range=max}, ~6,5 mil
+     * linhas por ativo antigo), e este método é chamado uma vez por ativo a
+     * cada refresh de tela — carregar o histórico inteiro só para ler a última
+     * linha travava a UI proporcionalmente ao tamanho da carteira.</p>
+     */
     private double latestQuotePrice(long assetId) {
-        List<QuoteHistory> history = quoteHistoryRepository.listByAsset(assetId);
-        if (history.isEmpty()) {
-            return 0;
-        }
-        // listByAsset ja devolve ordenado por date ASC (QuoteHistoryRepositoryImpl) - o ultimo item e o mais recente.
-        return history.get(history.size() - 1).getPrice();
+        return quoteHistoryRepository.findLatestByAsset(assetId)
+                .map(QuoteHistory::getPrice)
+                .orElse(0.0);
     }
 
     /**
@@ -303,11 +334,26 @@ public class PositionServiceImpl implements PositionService {
         return buyRate != null ? value * buyRate : value;
     }
 
+    /**
+     * Taxa de compra da moeda, <b>sempre a partir do cache</b> do painel
+     * macro.
+     *
+     * <p>Usa {@code getCachedMacroSnapshot()} e não {@code getMacroSnapshot()}
+     * de propósito: cálculo de posição é chamado em série, um ativo por vez,
+     * direto da FX thread durante o {@code refresh()} de quatro telas. Com a
+     * versão que busca, bastava o TTL de 5 min vencer para a montagem da tela
+     * disparar uma requisição HTTP síncrona e travar a janela.</p>
+     *
+     * <p>Quem atualiza o cache é o {@code Task} de background das telas. Numa
+     * primeira abertura sem cache ainda, a conversão cai no mesmo caminho de
+     * resiliência que já existia para "API fora do ar" (valor sem converter /
+     * posição de câmbio em 0), e a tela se corrige no redesenho seguinte.</p>
+     */
     private Double fxBuyRate(String isoCurrency) {
         if (isoCurrency == null || isoCurrency.isBlank()) {
             return null;
         }
-        MacroSnapshot snapshot = marketService.getMacroSnapshot();
+        MacroSnapshot snapshot = marketService.getCachedMacroSnapshot();
         if (snapshot == null) {
             return null;
         }

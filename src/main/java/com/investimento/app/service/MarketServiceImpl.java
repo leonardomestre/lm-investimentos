@@ -31,6 +31,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -145,6 +146,16 @@ public class MarketServiceImpl implements MarketService {
             // o placeholder, RT06/resiliencia da ATV-06).
             return macroSnapshotCache;
         }
+    }
+
+    @Override
+    public MacroSnapshot getCachedMacroSnapshot() {
+        return macroSnapshotCache;
+    }
+
+    @Override
+    public Map<String, List<IndicatorPoint>> getCachedIndicators() {
+        return indicatorsCache;
     }
 
     private void persistTodayRate(DailyRate rate) {
@@ -399,22 +410,30 @@ public class MarketServiceImpl implements MarketService {
         };
     }
 
+    /**
+     * O seed monta a lista inteira e grava de uma vez ({@code upsertAll}, uma
+     * transacao so). Um upsert por ponto seguraria a conexao unica do app por
+     * milhares de transacoes seguidas — {@code range=max} traz ~6,5 mil pontos
+     * para um ativo antigo — congelando a UI, que compartilha essa conexao.
+     */
     private void seedFromBrapi(Asset asset) {
         try {
             List<com.investimento.app.api.brapi.model.HistoricalPoint> history =
                     brapiClient.getHistory(asset.getSourceIdentifier(), "max", "1d");
+            List<QuoteHistory> quotes = new ArrayList<>();
             for (com.investimento.app.api.brapi.model.HistoricalPoint point : history) {
                 Double price = point.adjustedClose() != null ? point.adjustedClose() : point.close();
                 if (price == null) {
                     continue;
                 }
-                quoteHistoryRepository.upsert(QuoteHistory.builder()
+                quotes.add(QuoteHistory.builder()
                         .assetId(asset.getId())
                         .date(point.date())
                         .price(price)
                         .source(QuoteSource.BRAPI)
                         .build());
             }
+            quoteHistoryRepository.upsertAll(deduplicateByDate(quotes));
         } catch (BrapiException e) {
             logFailure("seedInitialHistory(BRAPI, " + asset.getSourceIdentifier() + ")", e);
         }
@@ -424,20 +443,37 @@ public class MarketServiceImpl implements MarketService {
         try {
             List<com.investimento.app.api.coingecko.model.HistoricalPoint> history =
                     coinGeckoClient.getHistory(asset.getSourceIdentifier(), 365);
+            List<QuoteHistory> quotes = new ArrayList<>();
             for (com.investimento.app.api.coingecko.model.HistoricalPoint point : history) {
                 if (point.price() == null) {
                     continue;
                 }
-                quoteHistoryRepository.upsert(QuoteHistory.builder()
+                quotes.add(QuoteHistory.builder()
                         .assetId(asset.getId())
                         .date(point.date())
                         .price(point.price())
                         .source(QuoteSource.COINGECKO)
                         .build());
             }
+            quoteHistoryRepository.upsertAll(deduplicateByDate(quotes));
         } catch (CoinGeckoException e) {
             logFailure("seedInitialHistory(COINGECKO, " + asset.getSourceIdentifier() + ")", e);
         }
+    }
+
+    /**
+     * Mantem so o ultimo ponto de cada data. Necessario porque
+     * {@code ON CONFLICT} resolve conflito com linhas <b>ja gravadas</b>, nao
+     * entre linhas do mesmo lote — e a CoinGecko devolve granularidade horaria
+     * quando {@code days} e grande (varios pontos por dia), o que faria o
+     * batch inteiro falhar com {@code UNIQUE constraint failed}.
+     */
+    private static List<QuoteHistory> deduplicateByDate(List<QuoteHistory> quotes) {
+        Map<LocalDate, QuoteHistory> byDate = new LinkedHashMap<>();
+        for (QuoteHistory quote : quotes) {
+            byDate.put(quote.getDate(), quote);
+        }
+        return new ArrayList<>(byDate.values());
     }
 
     @Override

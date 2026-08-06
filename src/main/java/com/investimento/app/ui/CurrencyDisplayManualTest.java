@@ -264,6 +264,18 @@ public final class CurrencyDisplayManualTest {
             return Map.of();
         }
 
+        // Nao incrementa snapshotCalls de proposito: o contador mede consulta
+        // que buscaria dado de fora, e a leitura de cache nunca busca.
+        @Override
+        public MacroSnapshot getCachedMacroSnapshot() {
+            return snapshot;
+        }
+
+        @Override
+        public Map<String, List<IndicatorPoint>> getCachedIndicators() {
+            return Map.of();
+        }
+
         @Override
         public Task<Void> updateQuotes(List<Asset> assets) {
             throw new UnsupportedOperationException("nao usado por CurrencyDisplay");

@@ -101,6 +101,18 @@ public final class RegistrationViewManualTest {
     }
 
     private static void runAllScenarios() throws Exception {
+        // Este teste bate na brapi.dev de verdade (debounce do autocomplete,
+        // validacao de ticker, deteccao de ticker renomeado). O token nao e
+        // mais embutido no codigo - o repositorio e publico -, entao sem a
+        // variavel de ambiente nao ha o que testar: melhor parar aqui com uma
+        // mensagem clara do que deixar cada cenario falhar com "0 requisicoes"
+        // e parecer bug do app.
+        if (System.getenv("BRAPI_TOKEN") == null || System.getenv("BRAPI_TOKEN").isBlank()) {
+            throw new IllegalStateException(
+                    "defina BRAPI_TOKEN no ambiente antes de rodar este teste "
+                            + "(ele faz chamadas reais a brapi.dev; nao ha token embutido no projeto).");
+        }
+
         Connection connection = openInMemoryDatabase();
         AssetRepository assetRepository = new AssetRepositoryImpl(connection);
         TransactionRepository transactionRepository = new TransactionRepositoryImpl(connection);
